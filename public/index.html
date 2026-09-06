@@ -10,30 +10,65 @@
 </head>
 <body class="bg-slate-950 text-white min-h-screen flex items-center justify-center p-4 font-sans">
 
-  <div id="lobby" class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-lg space-y-6">
+  <!-- ==================== หน้าสร้างห้อง (แสดงเป็นค่าเริ่มต้น) ==================== -->
+  <div id="host-setup-card" class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-6">
     <h1 class="text-3xl font-black text-center text-amber-400 tracking-wider">🎯 BINGO REALTIME</h1>
 
-    <div class="bg-slate-800/60 p-4 rounded-xl space-y-3 border border-slate-700">
-      <h2 class="font-bold text-emerald-400">สำหรับผู้สร้างห้อง (Host)</h2>
+    <div class="bg-slate-800/60 p-5 rounded-xl space-y-4 border border-slate-700">
+      <h2 class="font-bold text-emerald-400 text-lg">สำหรับผู้สร้างห้อง (Host)</h2>
       <label class="block text-xs text-slate-400 leading-relaxed">
         ใส่ชุดคำคั่นด้วยจุลภาค (,) หรือเว้นว่างไว้เพื่อใช้เลข 1-75 (ต้องมี 24 คำขึ้นไป):
       </label>
-      <textarea id="customItemsInput" rows="3" placeholder="เว้นว่างไว้ = ใช้เลข 1-75 อัตโนมัติ" class="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-xs focus:ring-1 focus:ring-emerald-400 outline-none"></textarea>
-      <button onclick="createHost()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-bold transition text-sm">
+      <textarea id="customItemsInput" rows="4" placeholder="เว้นว่างไว้ = ใช้เลข 1-75 อัตโนมัติ" class="w-full p-3 rounded-lg bg-slate-900 border border-slate-700 text-xs focus:ring-1 focus:ring-emerald-400 outline-none text-slate-200"></textarea>
+      <button onclick="createHost()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold transition text-base shadow-lg shadow-emerald-900/30">
         สร้างห้องใหม่
       </button>
     </div>
 
-    <div class="bg-slate-800/60 p-4 rounded-xl space-y-3 border border-slate-700">
-      <h2 class="font-bold text-indigo-400">สำหรับผู้เล่น (Player)</h2>
-      <input id="playerName" type="text" placeholder="ใส่ชื่อของคุณ" class="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-sm text-center outline-none">
-      <input id="joinRoomId" type="text" placeholder="รหัสห้อง 4 ตัว" class="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-sm text-center uppercase tracking-widest outline-none">
-      <button onclick="joinGame()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-2.5 rounded-lg font-bold transition text-sm">
-        เข้าร่วมห้อง
+    <!-- ลิงก์สำหรับคนที่ต้องการพิมพ์ Code เข้าเล่นเอง -->
+    <div class="text-center pt-2">
+      <button onclick="switchView('manual-join')" class="text-xs text-slate-400 hover:text-amber-400 underline transition">
+        มีรหัสห้องอยู่แล้ว? คลิกที่นี่เพื่อเข้าร่วมห้อง
       </button>
     </div>
   </div>
 
+  <!-- ==================== หน้าสำหรับคนสแกน QR (ใส่แค่ชื่อ) ==================== -->
+  <div id="qr-join-card" class="hidden bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-6 text-center">
+    <h1 class="text-3xl font-black text-amber-400 tracking-wider">🎯 BINGO REALTIME</h1>
+    
+    <div class="bg-slate-800/60 p-5 rounded-xl space-y-4 border border-slate-700">
+      <p class="text-xs text-slate-400 uppercase tracking-widest">กำลังเข้าร่วมห้อง</p>
+      <p id="qr-room-badge" class="text-3xl font-black text-indigo-400 font-mono tracking-wider">-</p>
+      
+      <input id="qrPlayerName" type="text" placeholder="ใส่ชื่อของคุณ" class="w-full p-3 rounded-lg bg-slate-900 border border-slate-700 text-sm text-center outline-none focus:border-indigo-500 text-white">
+      <button onclick="joinViaQR()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold transition text-sm shadow-lg shadow-indigo-900/30">
+        เข้าเล่นเกม
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== หน้าเข้าห้องแบบพิมพ์รหัสเอง ==================== -->
+  <div id="manual-join-card" class="hidden bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-6">
+    <h1 class="text-3xl font-black text-center text-amber-400 tracking-wider">🎯 BINGO REALTIME</h1>
+
+    <div class="bg-slate-800/60 p-5 rounded-xl space-y-4 border border-slate-700">
+      <h2 class="font-bold text-indigo-400 text-lg text-center">เข้าร่วมห้อง</h2>
+      <input id="manualPlayerName" type="text" placeholder="ใส่ชื่อของคุณ" class="w-full p-3 rounded-lg bg-slate-900 border border-slate-700 text-sm text-center outline-none focus:border-indigo-500">
+      <input id="manualRoomId" type="text" placeholder="รหัสห้อง 4 ตัว" class="w-full p-3 rounded-lg bg-slate-900 border border-slate-700 text-sm text-center uppercase tracking-widest outline-none focus:border-indigo-500">
+      <button onclick="joinManual()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold transition text-sm shadow-lg shadow-indigo-900/30">
+        เข้าร่วมห้อง
+      </button>
+    </div>
+
+    <div class="text-center pt-2">
+      <button onclick="switchView('host-setup')" class="text-xs text-slate-400 hover:text-emerald-400 underline transition">
+        กลับไปหน้าสร้างห้อง
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== จอแสดงผล Host ==================== -->
   <div id="host-view" class="hidden bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-4xl space-y-6">
     <div class="flex justify-between items-center border-b border-slate-800 pb-4">
       <div>
@@ -61,6 +96,7 @@
     </div>
   </div>
 
+  <!-- ==================== จอแสดงผล Player ==================== -->
   <div id="player-view" class="hidden bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-2xl w-full max-w-md space-y-4">
     <div class="flex justify-between items-center border-b border-slate-800 pb-3">
       <div>
@@ -87,11 +123,31 @@
     let currentRoom = '';
     let currentDrawn = [];
 
+    // ตรวจสอบทันทีตอนเปิดหน้าเว็บว่ามี ?room=XXXX ติดมากับลิงก์หรือไม่ (จากการสแกน QR)
     window.onload = () => {
-      const roomParam = new URLSearchParams(window.location.search).get('room');
-      if (roomParam) document.getElementById('joinRoomId').value = roomParam;
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomParam = urlParams.get('room');
+
+      if (roomParam) {
+        currentRoom = roomParam.toUpperCase();
+        document.getElementById('qr-room-badge').innerText = currentRoom;
+        switchView('qr-join');
+      } else {
+        switchView('host-setup');
+      }
     };
 
+    function switchView(viewName) {
+      document.getElementById('host-setup-card').classList.add('hidden');
+      document.getElementById('qr-join-card').classList.add('hidden');
+      document.getElementById('manual-join-card').classList.add('hidden');
+
+      if (viewName === 'host-setup') document.getElementById('host-setup-card').classList.remove('hidden');
+      if (viewName === 'qr-join') document.getElementById('qr-join-card').classList.remove('hidden');
+      if (viewName === 'manual-join') document.getElementById('manual-join-card').classList.remove('hidden');
+    }
+
+    // Host สร้างห้อง
     function createHost() {
       const text = document.getElementById('customItemsInput').value.trim();
       let customItems = null;
@@ -106,10 +162,11 @@
 
     socket.on('room-created', ({ roomId }) => {
       currentRoom = roomId;
-      document.getElementById('lobby').classList.add('hidden');
+      hideAllSetupCards();
       document.getElementById('host-view').classList.remove('hidden');
       document.getElementById('host-room-code').innerText = roomId;
 
+      // ลิงก์ที่สร้างใน QR จะมี ?room=XXXX แนบไปเสมอ
       new QRCode(document.getElementById('qrcode'), {
         text: `${window.location.origin}?room=${roomId}`,
         width: 100,
@@ -117,23 +174,30 @@
       });
     });
 
-    function drawItem() {
-      socket.emit('draw-item', currentRoom);
+    // Player เข้าร่วมผ่าน QR (กรอกแค่ชื่อ)
+    function joinViaQR() {
+      const name = document.getElementById('qrPlayerName').value.trim();
+      if (!name) return alert('กรุณากรอกชื่อของคุณ');
+      socket.emit('join-room', { roomId: currentRoom, name });
     }
 
-    function joinGame() {
-      const name = document.getElementById('playerName').value.trim();
-      const roomId = document.getElementById('joinRoomId').value.trim();
-      if (!name || !roomId) return alert('กรุณากรอกชื่อและรหัสห้อง');
-      socket.emit('join-room', { roomId, name });
+    // Player เข้าร่วมแบบกรอกรหัสเอง
+    function joinManual() {
+      const name = document.getElementById('manualPlayerName').value.trim();
+      const roomId = document.getElementById('manualRoomId').value.trim();
+      if (!name || !roomId) return alert('กรุณากรอกชื่อและรหัสห้องให้ครบถ้วน');
+      currentRoom = roomId.toUpperCase();
+      socket.emit('join-room', { roomId: currentRoom, name });
     }
 
     socket.on('joined-success', ({ roomId, card, drawnItems }) => {
       currentRoom = roomId;
       currentDrawn = drawnItems;
-      document.getElementById('lobby').classList.add('hidden');
+      hideAllSetupCards();
       document.getElementById('player-view').classList.remove('hidden');
-      document.getElementById('player-name-disp').innerText = document.getElementById('playerName').value;
+      
+      const enteredName = document.getElementById('qrPlayerName').value || document.getElementById('manualPlayerName').value;
+      document.getElementById('player-name-disp').innerText = enteredName;
       document.getElementById('player-room-disp').innerText = roomId;
 
       if (drawnItems.length > 0) {
@@ -141,6 +205,16 @@
       }
       renderCard(card);
     });
+
+    function hideAllSetupCards() {
+      document.getElementById('host-setup-card').classList.add('hidden');
+      document.getElementById('qr-join-card').classList.add('hidden');
+      document.getElementById('manual-join-card').classList.add('hidden');
+    }
+
+    function drawItem() {
+      socket.emit('draw-item', currentRoom);
+    }
 
     function toggleAuto(enabled) {
       socket.emit('toggle-auto', { roomId: currentRoom, enabled });
@@ -175,7 +249,7 @@
         row.forEach((cell, c) => {
           const btn = document.createElement('button');
           const isDrawn = currentDrawn.includes(cell.val) || cell.val === 'FREE';
-
+          
           let style = 'border text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center p-1 text-center break-words transition-all ';
 
           if (cell.marked) {
