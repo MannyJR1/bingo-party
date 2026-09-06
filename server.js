@@ -125,29 +125,35 @@ function calculateMinToGo(boardData) {
   return minToGo;
 }
 
+function initMasterPool(config) {
+  let masterColumns = { B: [], I: [], N: [], G: [], O: [] };
+  let pool = [];
+
+  if (config.mode === '1-75') {
+    masterColumns.B = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 1), letter: 'B' }));
+    masterColumns.I = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 16), letter: 'I' }));
+    masterColumns.N = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 31), letter: 'N' }));
+    masterColumns.G = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 46), letter: 'G' }));
+    masterColumns.O = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 61), letter: 'O' }));
+    pool = [...masterColumns.B, ...masterColumns.I, ...masterColumns.N, ...masterColumns.G, ...masterColumns.O];
+  } else if (config.mode === '1-90') {
+    pool = Array.from({ length: 90 }, (_, i) => ({ val: String(i + 1), letter: '' }));
+  } else {
+    const hdrs = config.headers || ['B', 'I', 'N', 'G', 'O'];
+    config.customWords.forEach((word, idx) => {
+      const letter = hdrs[idx % hdrs.length] || '•';
+      pool.push({ val: word, letter });
+      if (masterColumns[letter]) masterColumns[letter].push({ val: word, letter });
+    });
+  }
+
+  return { pool, masterColumns };
+}
+
 io.on('connection', (socket) => {
   // Host สร้างห้อง
   socket.on('create-room', (config) => {
-    let masterColumns = { B: [], I: [], N: [], G: [], O: [] };
-    let pool = [];
-
-    if (config.mode === '1-75') {
-      masterColumns.B = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 1), letter: 'B' }));
-      masterColumns.I = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 16), letter: 'I' }));
-      masterColumns.N = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 31), letter: 'N' }));
-      masterColumns.G = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 46), letter: 'G' }));
-      masterColumns.O = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 61), letter: 'O' }));
-      pool = [...masterColumns.B, ...masterColumns.I, ...masterColumns.N, ...masterColumns.G, ...masterColumns.O];
-    } else if (config.mode === '1-90') {
-      pool = Array.from({ length: 90 }, (_, i) => ({ val: String(i + 1), letter: '' }));
-    } else {
-      const hdrs = config.headers || ['B', 'I', 'N', 'G', 'O'];
-      config.customWords.forEach((word, idx) => {
-        const letter = hdrs[idx % hdrs.length] || '•';
-        pool.push({ val: word, letter });
-        if (masterColumns[letter]) masterColumns[letter].push({ val: word, letter });
-      });
-    }
+    const { pool, masterColumns } = initMasterPool(config);
 
     const cardsPerPlayer = parseInt(config.cardsPerPlayer) || 1;
     const totalCardsLimit = parseInt(config.totalCardsLimit) || 30;
@@ -168,6 +174,8 @@ io.on('connection', (socket) => {
       status: 'waiting', // 'waiting', 'countdown', 'in-progress'
       countdownTimer: null,
       autoDrawInterval: null,
+      autoDrawTimeSec: 7,
+      stopOnWinning: true,
       winners: [],
       masterColumns
     };
@@ -219,6 +227,8 @@ io.on('connection', (socket) => {
       status: room.status
     });
 
+    // ส่งอัปเดตไป Lobby & Monitor ของ Host
+    io.to(room.host).emit('update-lobby-players', Object.values(room.players).map(p => p.name));
     io.to(room.host).emit('update-players-dashboard', {
       players: Object.values(room.players),
       usedCards: room.usedCardsCount,
@@ -265,7 +275,14 @@ io.on('connection', (socket) => {
   // ฟังก์ชันส่วนกลางสำหรับการ Draw
   function performDraw(roomId) {
     const room = rooms[roomId];
-    if (!room || room.available.length === 0) return null;
+    if (!room || room.available.length === 0) {
+      if (room.autoDrawInterval) {
+        clearInterval(room.autoDrawInterval);
+        room.autoDrawInterval = null;
+        io.to(room.host).emit('auto-draw-stopped');
+      }
+      return null;
+    }
 
     const idx = Math.floor(Math.random() * room.available.length);
     const item = room.available.splice(idx, 1)[0];
@@ -277,8 +294,7 @@ io.on('connection', (socket) => {
       previous: room.drawn.length > 1 ? room.drawn[room.drawn.length - 2] : null
     });
 
-    // ตรวจสอบ Auto-mark และเงื่อนไขบิงโก
-    let someoneWon = false;
+    let winnerFound = null;
     Object.values(room.players).forEach(p => {
       let anyBoardChanged = false;
       p.boards.forEach(board => {
@@ -295,7 +311,7 @@ io.on('connection', (socket) => {
         board.minToGo = calculateMinToGo(board);
         if (board.minToGo === 0 && !p.hasWon) {
           p.hasWon = true;
-          someoneWon = true;
+          winnerFound = p.name;
           if (!room.winners.includes(p.name)) room.winners.push(p.name);
           io.to(roomId).emit('game-over', { winner: p.name, winnersList: room.winners });
         }
@@ -313,33 +329,54 @@ io.on('connection', (socket) => {
       maxPlayers: room.maxPlayers
     });
 
-    return { item, someoneWon };
+    // หากมีผู้ชนะ และตั้งค่า Stop When Winning ให้สั่งหยุด Auto Draw ทันที
+    if (winnerFound && room.stopOnWinning) {
+      if (room.autoDrawInterval) {
+        clearInterval(room.autoDrawInterval);
+        room.autoDrawInterval = null;
+        io.to(room.host).emit('auto-draw-stopped');
+      }
+    }
+
+    return { item, winnerFound };
   }
 
-  // Host กด Call สุ่มมือ
+  // Host กด Call แบบ Manual
   socket.on('draw-item', (roomId) => {
     const room = rooms[roomId];
     if (!room || room.host !== socket.id) return;
     performDraw(roomId);
   });
 
-  // Host เริ่ม/หยุด Auto Draw
+  // Host จัดการระบบ Auto Draw
   socket.on('start-auto-draw', ({ roomId, intervalSec, stopOnWin }) => {
     const room = rooms[roomId];
     if (!room || room.host !== socket.id) return;
 
+    room.stopOnWinning = stopOnWin;
+    room.autoDrawTimeSec = parseInt(intervalSec) || 7;
+
     if (room.autoDrawInterval) clearInterval(room.autoDrawInterval);
 
     room.autoDrawInterval = setInterval(() => {
-      const res = performDraw(roomId);
-      if (!res || room.available.length === 0 || (stopOnWin && res.someoneWon)) {
-        clearInterval(room.autoDrawInterval);
-        room.autoDrawInterval = null;
-        io.to(room.host).emit('auto-draw-stopped');
-      }
-    }, (parseInt(intervalSec) || 5) * 1000);
+      performDraw(roomId);
+    }, room.autoDrawTimeSec * 1000);
 
     socket.emit('auto-draw-started');
+  });
+
+  // ปรับเปลี่ยนช่วงเวลา Auto Draw ทันทีขณะกำลังรันอยู่
+  socket.on('change-auto-interval', ({ roomId, intervalSec }) => {
+    const room = rooms[roomId];
+    if (!room || room.host !== socket.id) return;
+
+    room.autoDrawTimeSec = parseInt(intervalSec) || 7;
+    if (room.autoDrawInterval) {
+      clearInterval(room.autoDrawInterval);
+      room.autoDrawInterval = setInterval(() => {
+        performDraw(roomId);
+      }, room.autoDrawTimeSec * 1000);
+    }
   });
 
   socket.on('stop-auto-draw', (roomId) => {
@@ -353,7 +390,47 @@ io.on('connection', (socket) => {
     socket.emit('auto-draw-stopped');
   });
 
-  // Player กดกากบาทช่อง (ล็อกถาวร กดซ้ำไม่หลุด)
+  // Host กด Restart Game ล้างกระดานและเริ่มรอบใหม่
+  socket.on('restart-game', (roomId) => {
+    const room = rooms[roomId];
+    if (!room || room.host !== socket.id) return;
+
+    if (room.autoDrawInterval) {
+      clearInterval(room.autoDrawInterval);
+      room.autoDrawInterval = null;
+      io.to(room.host).emit('auto-draw-stopped');
+    }
+
+    const { pool } = initMasterPool(room.config);
+    room.available = [...pool];
+    room.drawn = [];
+    room.winners = [];
+
+    // สร้างการ์ดใบใหม่ให้ผู้เล่นเดิมทุกคน
+    Object.values(room.players).forEach(p => {
+      const newBoards = [];
+      for (let i = 0; i < room.cardsPerPlayer; i++) {
+        const b = generateSingleBoard(room.config);
+        b.id = i;
+        b.minToGo = calculateMinToGo(b);
+        newBoards.push(b);
+      }
+      p.boards = newBoards;
+      p.hasWon = false;
+      io.to(p.id).emit('boards-updated', p.boards);
+      io.to(p.id).emit('game-restarted');
+    });
+
+    io.to(roomId).emit('game-restarted');
+    io.to(room.host).emit('update-players-dashboard', {
+      players: Object.values(room.players),
+      usedCards: room.usedCardsCount,
+      totalCardsLimit: room.totalCardsLimit,
+      maxPlayers: room.maxPlayers
+    });
+  });
+
+  // Player กดกากบาทช่อง (ล็อกถาวร)
   socket.on('mark-cell', ({ roomId, boardIdx, r, c }) => {
     const room = rooms[roomId];
     if (!room || !room.players[socket.id]) return;
@@ -363,7 +440,7 @@ io.on('connection', (socket) => {
     if (!board) return;
 
     const cell = board.grid[r][c];
-    if (!cell || cell.isBlank || cell.marked) return; // หาก marked อยู่แล้วจะไม่สามารถเอาออกได้
+    if (!cell || cell.isBlank || cell.marked) return;
 
     const isDrawn = room.drawn.some(d => d.val === cell.val);
     if (cell.isFree || isDrawn) {
@@ -382,11 +459,17 @@ io.on('connection', (socket) => {
         p.hasWon = true;
         if (!room.winners.includes(p.name)) room.winners.push(p.name);
         io.to(roomId).emit('game-over', { winner: p.name, winnersList: room.winners });
+
+        if (room.stopOnWinning && room.autoDrawInterval) {
+          clearInterval(room.autoDrawInterval);
+          room.autoDrawInterval = null;
+          io.to(room.host).emit('auto-draw-stopped');
+        }
       }
     }
   });
 
-  // สลับ Auto Mark ในหน้า Settings
+  // สลับ Auto Mark ใน Setting
   socket.on('toggle-auto', ({ roomId, enabled }) => {
     const room = rooms[roomId];
     if (room && room.players[socket.id]) {
@@ -410,6 +493,11 @@ io.on('connection', (socket) => {
             p.hasWon = true;
             if (!room.winners.includes(p.name)) room.winners.push(p.name);
             io.to(roomId).emit('game-over', { winner: p.name, winnersList: room.winners });
+            if (room.stopOnWinning && room.autoDrawInterval) {
+              clearInterval(room.autoDrawInterval);
+              room.autoDrawInterval = null;
+              io.to(room.host).emit('auto-draw-stopped');
+            }
           }
         });
 
@@ -431,6 +519,7 @@ io.on('connection', (socket) => {
       if (room.players[socket.id]) {
         room.usedCardsCount -= room.cardsPerPlayer;
         delete room.players[socket.id];
+        io.to(room.host).emit('update-lobby-players', Object.values(room.players).map(p => p.name));
         io.to(room.host).emit('update-players-dashboard', {
           players: Object.values(room.players),
           usedCards: room.usedCardsCount,
