@@ -11,9 +11,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
 
-// สุ่มสร้างการ์ดตามประเภท
-function generateBoard(config) {
-  const { mode, customWords, freeText, gridDim } = config;
+// สุ่มสร้างตารางการ์ดบิงโก 1 ใบ
+function generateSingleBoard(config) {
+  const { mode, customWords, freeText, gridDim, includeFree } = config;
 
   if (mode === '1-75') {
     const cols = [
@@ -27,7 +27,7 @@ function generateBoard(config) {
     for (let r = 0; r < 5; r++) {
       grid[r] = [];
       for (let c = 0; c < 5; c++) {
-        if (r === 2 && c === 2 && config.includeFree) {
+        if (r === 2 && c === 2 && includeFree) {
           grid[r][c] = { val: freeText || 'FREE', marked: true, isFree: true };
         } else {
           const pool = cols[c];
@@ -40,13 +40,11 @@ function generateBoard(config) {
   }
 
   if (mode === '1-90') {
-    // Housie 3x9 Ticket (แต่ละแถวมี 5 ตัวเลข 4 ช่องว่าง)
     const grid = Array.from({ length: 3 }, () => Array(9).fill(null).map(() => ({ val: '', marked: false, isBlank: true })));
     const colRanges = [
       [1, 9], [10, 19], [20, 29], [30, 39], [40, 49],
       [50, 59], [60, 69], [70, 79], [80, 90]
     ];
-
     for (let r = 0; r < 3; r++) {
       const colIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8].sort(() => 0.5 - Math.random()).slice(0, 5);
       colIndices.forEach(c => {
@@ -72,7 +70,7 @@ function generateBoard(config) {
     grid[r] = [];
     for (let c = 0; c < size; c++) {
       const isCenter = size % 2 === 1 && r === Math.floor(size / 2) && c === Math.floor(size / 2);
-      if (isCenter && config.includeFree) {
+      if (isCenter && includeFree) {
         grid[r][c] = { val: freeText || 'FREE', marked: true, isFree: true };
       } else {
         grid[r][c] = { val: shuffled[idx++], marked: false, isFree: false };
@@ -82,24 +80,21 @@ function generateBoard(config) {
   return { grid, rows: size, cols: size };
 }
 
-// ตรวจสอบจำนวนช่องที่ขาดก่อนจะ Bingo (To-Go)
+// ตรวจสอบจำนวนช่องที่ขาดก่อน Bingo (To-Go count)
 function calculateMinToGo(boardData) {
   const { grid, rows, cols } = boardData;
 
-  // สำหรับ 1-90 (ครบ 1 แถว หรือ ครบทั้งใบ)
   if (cols === 9) {
-    let minNeededInRow = 5;
+    let minNeeded = 5;
     for (let r = 0; r < 3; r++) {
-      const activeCells = grid[r].filter(c => !c.isBlank);
-      const unmarked = activeCells.filter(c => !c.marked).length;
-      if (unmarked < minNeededInRow) minNeededInRow = unmarked;
+      const active = grid[r].filter(c => !c.isBlank);
+      const unmarked = active.filter(c => !c.marked).length;
+      if (unmarked < minNeeded) minNeeded = unmarked;
     }
-    return minNeededInRow;
+    return minNeeded;
   }
 
-  // สำหรับ Square Grids (3x3, 4x4, 5x5)
   let minToGo = rows;
-
   // แนวนอน
   for (let r = 0; r < rows; r++) {
     const un = grid[r].filter(cell => !cell.marked).length;
@@ -113,7 +108,7 @@ function calculateMinToGo(boardData) {
     }
     if (un < minToGo) minToGo = un;
   }
-  // ทแยงมุม (เฉพาะตารางจัตุรัส)
+  // ทแยงมุม
   if (rows === cols) {
     let d1 = 0, d2 = 0;
     for (let i = 0; i < rows; i++) {
@@ -128,7 +123,7 @@ function calculateMinToGo(boardData) {
 }
 
 io.on('connection', (socket) => {
-  // สร้างห้องใหม่
+  // Host สร้างห้อง
   socket.on('create-room', (config) => {
     let pool = [];
     if (config.mode === '1-75') {
@@ -139,10 +134,18 @@ io.on('connection', (socket) => {
       pool = [...new Set(config.customWords)];
     }
 
+    const cardsPerPlayer = parseInt(config.cardsPerPlayer) || 1;
+    const totalCardsLimit = parseInt(config.totalCardsLimit) || 30;
+    const maxPlayers = Math.floor(totalCardsLimit / cardsPerPlayer);
+
     const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
     rooms[roomId] = {
       host: socket.id,
       config,
+      cardsPerPlayer,
+      totalCardsLimit,
+      maxPlayers,
+      usedCardsCount: 0,
       pool,
       available: [...pool],
       drawn: [],
@@ -150,24 +153,44 @@ io.on('connection', (socket) => {
     };
 
     socket.join(roomId);
-    socket.emit('room-created', { roomId, config });
+    socket.emit('room-created', {
+      roomId,
+      config,
+      maxPlayers,
+      totalCardsLimit
+    });
   });
 
-  // ผู้เล่นเข้าห้อง
+  // Player เข้าร่วมห้อง
   socket.on('join-room', ({ roomId, name }) => {
     roomId = (roomId || '').toUpperCase();
     const room = rooms[roomId];
-    if (!room) return socket.emit('error-msg', 'ไม่พบรหัสห้องนี้');
 
-    const board = generateBoard(room.config);
-    const minToGo = calculateMinToGo(board);
+    if (!room) {
+      return socket.emit('error-msg', 'ไม่พบรหัสห้องนี้ในระบบ');
+    }
+
+    // ตรวจสอบโควตาการ์ดรวมของห้อง
+    if (room.usedCardsCount + room.cardsPerPlayer > room.totalCardsLimit) {
+      return socket.emit('error-msg', 'ห้องเต็มแล้ว (Bingo Cards หมดแล้ว)');
+    }
+
+    // สร้างการ์ดตามจำนวนที่ Host กำหนดต่อ 1 Player
+    const boards = [];
+    for (let i = 0; i < room.cardsPerPlayer; i++) {
+      const b = generateSingleBoard(room.config);
+      b.id = i;
+      b.minToGo = calculateMinToGo(b);
+      boards.push(b);
+    }
+
+    room.usedCardsCount += room.cardsPerPlayer;
 
     room.players[socket.id] = {
       id: socket.id,
       name,
-      board,
+      boards,
       autoMark: false,
-      minToGo,
       hasWon: false
     };
 
@@ -175,12 +198,17 @@ io.on('connection', (socket) => {
     socket.emit('joined-success', {
       roomId,
       config: room.config,
-      board,
+      boards,
       drawn: room.drawn
     });
 
-    // ส่งข้อมูลนักเรียนทั้งหมดอัปเดตไปที่จอครู
-    io.to(room.host).emit('update-students-dashboard', Object.values(room.players));
+    // แจ้งข้อมูลอัปเดตไปที่หน้าจอ Host
+    io.to(room.host).emit('update-players-dashboard', {
+      players: Object.values(room.players),
+      usedCards: room.usedCardsCount,
+      totalCardsLimit: room.totalCardsLimit,
+      maxPlayers: room.maxPlayers
+    });
   });
 
   // Host กด Call ค่าถัดไป
@@ -194,56 +222,72 @@ io.on('connection', (socket) => {
 
     io.to(roomId).emit('item-drawn', { item, history: room.drawn });
 
-    // ประมวลผล Auto Mark และคำนวณ To-Go ใหม่
+    // ประมวลผล Auto Mark และเช็กบิงโก
     Object.values(room.players).forEach(p => {
-      if (p.autoMark) {
-        let changed = false;
-        p.board.grid.forEach(row => {
-          row.forEach(cell => {
-            if (cell && cell.val === item && !cell.marked) {
-              cell.marked = true;
-              changed = true;
-            }
+      let anyBoardChanged = false;
+      p.boards.forEach(board => {
+        if (p.autoMark) {
+          board.grid.forEach(row => {
+            row.forEach(cell => {
+              if (cell && cell.val === item && !cell.marked) {
+                cell.marked = true;
+                anyBoardChanged = true;
+              }
+            });
           });
-        });
-        if (changed) {
-          io.to(p.id).emit('board-updated', p.board);
         }
-      }
-      p.minToGo = calculateMinToGo(p.board);
-      if (p.minToGo === 0 && !p.hasWon) {
-        p.hasWon = true;
-        io.to(roomId).emit('game-over', { winner: p.name });
+        board.minToGo = calculateMinToGo(board);
+        if (board.minToGo === 0 && !p.hasWon) {
+          p.hasWon = true;
+          io.to(roomId).emit('game-over', { winner: p.name });
+        }
+      });
+
+      if (anyBoardChanged) {
+        io.to(p.id).emit('boards-updated', p.boards);
       }
     });
 
-    io.to(room.host).emit('update-students-dashboard', Object.values(room.players));
+    io.to(room.host).emit('update-players-dashboard', {
+      players: Object.values(room.players),
+      usedCards: room.usedCardsCount,
+      totalCardsLimit: room.totalCardsLimit,
+      maxPlayers: room.maxPlayers
+    });
   });
 
-  // กากบาทช่อง
-  socket.on('mark-cell', ({ roomId, r, c }) => {
+  // Player กดกากบาทที่ช่อง
+  socket.on('mark-cell', ({ roomId, boardIdx, r, c }) => {
     const room = rooms[roomId];
     if (!room || !room.players[socket.id]) return;
 
     const p = room.players[socket.id];
-    const cell = p.board.grid[r][c];
+    const board = p.boards[boardIdx];
+    if (!board) return;
 
+    const cell = board.grid[r][c];
     if (!cell || cell.isBlank) return;
+
     if (cell.isFree || room.drawn.includes(cell.val)) {
       cell.marked = !cell.marked;
-      p.minToGo = calculateMinToGo(p.board);
+      board.minToGo = calculateMinToGo(board);
 
-      socket.emit('board-updated', p.board);
-      io.to(room.host).emit('update-students-dashboard', Object.values(room.players));
+      socket.emit('boards-updated', p.boards);
+      io.to(room.host).emit('update-players-dashboard', {
+        players: Object.values(room.players),
+        usedCards: room.usedCardsCount,
+        totalCardsLimit: room.totalCardsLimit,
+        maxPlayers: room.maxPlayers
+      });
 
-      if (p.minToGo === 0 && !p.hasWon) {
+      if (board.minToGo === 0 && !p.hasWon) {
         p.hasWon = true;
         io.to(roomId).emit('game-over', { winner: p.name });
       }
     }
   });
 
-  // เปิด/ปิด Auto
+  // Player เปิด/ปิด Auto Mark ในหน้า Settings
   socket.on('toggle-auto', ({ roomId, enabled }) => {
     const room = rooms[roomId];
     if (room && room.players[socket.id]) {
@@ -252,23 +296,30 @@ io.on('connection', (socket) => {
 
       if (enabled) {
         let changed = false;
-        p.board.grid.forEach(row => {
-          row.forEach(cell => {
-            if (cell && !cell.isBlank && !cell.marked && (cell.isFree || room.drawn.includes(cell.val))) {
-              cell.marked = true;
-              changed = true;
-            }
+        p.boards.forEach(board => {
+          board.grid.forEach(row => {
+            row.forEach(cell => {
+              if (cell && !cell.isBlank && !cell.marked && (cell.isFree || room.drawn.includes(cell.val))) {
+                cell.marked = true;
+                changed = true;
+              }
+            });
           });
-        });
-        if (changed) {
-          p.minToGo = calculateMinToGo(p.board);
-          socket.emit('board-updated', p.board);
-          io.to(room.host).emit('update-students-dashboard', Object.values(room.players));
-
-          if (p.minToGo === 0 && !p.hasWon) {
+          board.minToGo = calculateMinToGo(board);
+          if (board.minToGo === 0 && !p.hasWon) {
             p.hasWon = true;
             io.to(roomId).emit('game-over', { winner: p.name });
           }
+        });
+
+        if (changed) {
+          socket.emit('boards-updated', p.boards);
+          io.to(room.host).emit('update-players-dashboard', {
+            players: Object.values(room.players),
+            usedCards: room.usedCardsCount,
+            totalCardsLimit: room.totalCardsLimit,
+            maxPlayers: room.maxPlayers
+          });
         }
       }
     }
@@ -277,12 +328,18 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     for (const [roomId, room] of Object.entries(rooms)) {
       if (room.players[socket.id]) {
+        room.usedCardsCount -= room.cardsPerPlayer;
         delete room.players[socket.id];
-        io.to(room.host).emit('update-students-dashboard', Object.values(room.players));
+        io.to(room.host).emit('update-players-dashboard', {
+          players: Object.values(room.players),
+          usedCards: room.usedCardsCount,
+          totalCardsLimit: room.totalCardsLimit,
+          maxPlayers: room.maxPlayers
+        });
       }
     }
   });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
