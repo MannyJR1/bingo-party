@@ -41,6 +41,11 @@
 </head>
 <body class="bg-[#0f172a] text-slate-100 min-h-screen flex items-center justify-center p-2 font-sans selection:bg-rose-500 selection:text-white">
 
+  <!-- Audio Elements -->
+  <audio id="audio-bgm" src="/audio/bgm.mp3" loop preload="auto"></audio>
+  <audio id="audio-win" src="/audio/win.mp3" preload="auto"></audio>
+
+  <!-- ==================== Overlay นับถอยหลัง 3-2-1 ==================== -->
   <div id="countdown-overlay" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex flex-col items-center justify-center space-y-6">
     <p class="text-xl uppercase tracking-widest text-slate-400 font-bold">Game Starting In</p>
     <div id="countdown-number" class="text-9xl font-black text-amber-400 animate-bounce">3</div>
@@ -49,6 +54,7 @@
     </button>
   </div>
 
+  <!-- ==================== Winner Celebration Modal ==================== -->
   <div id="winner-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-[110] flex items-center justify-center p-4">
     <div class="bg-slate-900 border-2 border-amber-400 p-8 rounded-3xl max-w-lg w-full text-center space-y-6 winner-box-glow transform transition-all scale-100">
       <div class="text-6xl animate-bounce">👑</div>
@@ -65,6 +71,7 @@
     </div>
   </div>
 
+  <!-- ==================== 1. Landing View ==================== -->
   <div id="landing-card" class="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center space-y-6">
     <h1 class="text-4xl font-black text-amber-400 tracking-wider">🎯 BINGO LIVE</h1>
     <p class="text-slate-400 text-sm">เลือกระบบที่ต้องการเข้าใช้งาน</p>
@@ -78,6 +85,7 @@
     </div>
   </div>
 
+  <!-- ==================== 2. Host Config & Live Preview ==================== -->
   <div id="host-config-card" class="hidden bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl max-w-4xl w-full">
     <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
       <h2 class="text-2xl font-black text-white">Bingo Card Generator</h2>
@@ -180,6 +188,7 @@
     </div>
   </div>
 
+  <!-- ==================== 3. Host Waiting Room / Lobby ==================== -->
   <div id="host-lobby-view" class="hidden bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl max-w-2xl w-full text-center space-y-6 my-4">
     <div class="border-b border-slate-800 pb-4">
       <span class="text-xs font-bold text-amber-400 uppercase tracking-widest">Bingo Waiting Room</span>
@@ -212,6 +221,7 @@
     </button>
   </div>
 
+  <!-- ==================== 4. Player Waiting Room ==================== -->
   <div id="player-waiting-view" class="hidden bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl max-w-md w-full text-center space-y-6 my-4">
     <div class="w-20 h-20 bg-indigo-950 border-2 border-indigo-500 rounded-full flex items-center justify-center mx-auto shadow-lg animate-pulse">
       <span class="text-3xl">⏳</span>
@@ -238,6 +248,7 @@
     </div>
   </div>
 
+  <!-- ==================== 5. Player QR Join ==================== -->
   <div id="qr-join-card" class="hidden bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center space-y-5">
     <h1 class="text-3xl font-black text-amber-400 tracking-wider">🎯 เข้าร่วมห้อง</h1>
     <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
@@ -250,6 +261,7 @@
     </button>
   </div>
 
+  <!-- ==================== 6. Player Manual Join ==================== -->
   <div id="manual-join-card" class="hidden bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center space-y-4">
     <h1 class="text-3xl font-black text-indigo-400 tracking-wider">เข้าเล่นด้วยรหัส</h1>
     <input id="manual-code-input" type="text" placeholder="รหัสห้อง 4 ตัว" class="w-full p-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-center font-mono font-black text-xl uppercase tracking-widest outline-none">
@@ -260,25 +272,38 @@
     <button onclick="goToLanding()" class="text-xs text-slate-400 hover:text-white pt-2 block w-full">← กลับหน้าแรก</button>
   </div>
 
+  <!-- ==================== 7. Host View ==================== -->
   <div id="host-view" class="hidden w-full max-w-7xl space-y-4 my-4">
-    <div class="grid grid-cols-2 bg-[#1e293b] border border-slate-800 text-white rounded-t-2xl overflow-hidden shadow-2xl text-center divide-x divide-slate-800">
-      <div class="py-5 px-2 flex flex-col items-center justify-center">
-        <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-slate-950 border-2 border-amber-400 text-white flex flex-col items-center justify-center shadow-xl my-2">
-          <span id="host-curr-letter" class="text-xs font-black text-amber-400 leading-none">BINGO</span>
-          <span id="host-curr-val" class="text-3xl sm:text-4xl font-black text-white leading-tight truncate max-w-[90%]">-</span>
+    <!-- แถบด้านบน: แยกวงกลมอักษรและข้อความชัดเจนตามรูปตัวอย่าง -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 bg-[#1e293b] border border-slate-800 text-white rounded-t-2xl overflow-hidden shadow-2xl divide-y sm:divide-y-0 sm:divide-x divide-slate-800">
+      <!-- CURRENT DRAW -->
+      <div class="flex flex-col">
+        <div class="py-5 px-6 flex items-center justify-center gap-6 min-h-[140px]">
+          <div class="w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-full bg-white text-blue-600 flex items-center justify-center shadow-xl border-4 border-amber-400">
+            <span id="host-curr-letter" class="text-4xl sm:text-5xl font-black tracking-tighter">B</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <span id="host-curr-val" class="text-3xl sm:text-5xl font-extrabold text-white tracking-wide break-words leading-tight">-</span>
+          </div>
         </div>
-        <p class="font-black tracking-widest text-xs sm:text-sm uppercase bg-slate-950/60 w-full py-1.5 mt-2 text-slate-400">CURRENT DRAW</p>
+        <p class="font-black tracking-widest text-xs sm:text-sm uppercase bg-slate-950/60 text-center py-2 text-slate-400 mt-auto">CURRENT DRAW</p>
       </div>
 
-      <div class="py-5 px-2 flex flex-col items-center justify-center">
-        <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-slate-950 border border-slate-700 text-slate-400 flex flex-col items-center justify-center shadow-xl my-2">
-          <span id="host-prev-letter" class="text-xs font-black text-slate-500 leading-none">PREV</span>
-          <span id="host-prev-val" class="text-3xl sm:text-4xl font-black text-slate-300 leading-tight truncate max-w-[90%]">-</span>
+      <!-- PREVIOUS DRAW -->
+      <div class="flex flex-col">
+        <div class="py-5 px-6 flex items-center justify-center gap-6 min-h-[140px] opacity-80">
+          <div class="w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-full bg-slate-950 text-slate-300 flex items-center justify-center shadow-xl border-2 border-slate-700">
+            <span id="host-prev-letter" class="text-4xl sm:text-5xl font-black tracking-tighter">-</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <span id="host-prev-val" class="text-2xl sm:text-4xl font-extrabold text-slate-300 tracking-wide break-words leading-tight">-</span>
+          </div>
         </div>
-        <p class="font-black tracking-widest text-xs sm:text-sm uppercase bg-slate-950/60 w-full py-1.5 mt-2 text-slate-500">PREVIOUS DRAW</p>
+        <p class="font-black tracking-widest text-xs sm:text-sm uppercase bg-slate-950/60 text-center py-2 text-slate-500 mt-auto">PREVIOUS DRAW</p>
       </div>
     </div>
 
+    <!-- แผงควบคุมระบบ Auto Draw และปุ่มควบคุม -->
     <div class="bg-[#1e293b] border border-slate-800 text-slate-200 p-5 rounded-b-2xl shadow-xl flex flex-wrap items-center justify-between gap-4">
       <div class="flex flex-col gap-2.5 text-xs">
         <span class="font-black text-amber-400 tracking-wide uppercase">AUTOMATIC DRAW</span>
@@ -315,9 +340,14 @@
       </div>
 
       <div class="flex flex-col gap-2 min-w-[200px]">
-        <button onclick="showWinnersModal()" class="bg-amber-500/20 border border-amber-500/40 text-amber-300 py-1.5 px-4 rounded-xl font-bold text-xs hover:bg-amber-500/30 transition">
-          🏆 Winners list (<span id="host-winners-count">0</span>)
-        </button>
+        <div class="flex gap-2">
+          <button onclick="showWinnersModal()" class="flex-1 bg-amber-500/20 border border-amber-500/40 text-amber-300 py-1.5 px-3 rounded-xl font-bold text-xs hover:bg-amber-500/30 transition">
+            🏆 Winners (<span id="host-winners-count">0</span>)
+          </button>
+          <button onclick="openSettingsModal()" class="bg-slate-800 border border-slate-700 text-white px-3 py-1.5 rounded-xl font-bold text-xs hover:bg-slate-700 transition" title="Audio Settings">
+            ⚙️ เสียง
+          </button>
+        </div>
         <button onclick="toggleMonitorView()" id="btn-toggle-monitor" class="bg-slate-800 border border-slate-700 text-white py-1.5 px-4 rounded-xl font-bold text-xs hover:bg-slate-700 transition">
           👁️ Show Live Monitor
         </button>
@@ -328,6 +358,7 @@
       </div>
     </div>
 
+    <!-- Master Board -->
     <div class="bg-[#1e293b] border border-slate-800 text-white rounded-2xl p-4 shadow-xl">
       <div class="grid grid-cols-5 bg-slate-950 text-amber-400 font-black text-2xl py-2.5 rounded-t-xl text-center tracking-widest border-b border-slate-800">
         <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
@@ -335,17 +366,17 @@
       <div id="master-board-columns" class="grid grid-cols-5 divide-x divide-slate-800 border border-slate-800 text-xs font-semibold p-2 bg-slate-900 rounded-b-xl min-h-[220px]"></div>
     </div>
 
+    <!-- Host Live Monitor -->
     <div id="host-monitor-section" class="hidden bg-[#1e293b] border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
-      <div class="flex justify-between items-center">
-        <div>
-          <h3 class="text-xl font-black text-white">กระดานของ Player ทุกคน (Host Live Monitor)</h3>
-          <p class="text-xs text-slate-400">แสดงกระดานจริงพร้อมตัวเลขทุกช่อง และไฮไลต์เขียวเพื่อตรวจเช็กความถูกต้อง</p>
-        </div>
+      <div>
+        <h3 class="text-xl font-black text-white">กระดานของ Player ทุกคน (Host Live Monitor)</h3>
+        <p class="text-xs text-slate-400">แสดงกระดานจริงพร้อมตัวเลขทุกช่อง และไฮไลต์เขียวเพื่อตรวจเช็กความถูกต้อง</p>
       </div>
       <div id="players-grid-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
     </div>
   </div>
 
+  <!-- ==================== 8. Player View ==================== -->
   <div id="player-view" class="hidden w-full max-w-md space-y-3 my-2">
     <div class="bg-[#2d2f34] text-white rounded-t-xl overflow-hidden flex items-center justify-between shadow-xl">
       <div class="bg-[#0052cc] px-4 py-3 flex items-center gap-3 min-w-[150px]">
@@ -370,6 +401,7 @@
     <div id="player-cards-stack" class="space-y-4"></div>
   </div>
 
+  <!-- ==================== Settings Modal พร้อมแถบปรับเสียง ==================== -->
   <div id="settings-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-xs w-full space-y-5 shadow-2xl">
       <div class="flex justify-between items-center border-b border-slate-800 pb-3">
@@ -377,10 +409,26 @@
         <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white text-sm font-bold">✕</button>
       </div>
 
-      <div class="flex justify-between items-center py-2">
+      <!-- ปรับความดังเพลง BGM -->
+      <div class="space-y-2">
+        <div class="flex justify-between items-center text-xs">
+          <span class="font-bold text-white">🎵 ความดังเสียงเพลง (BGM)</span>
+          <span id="volume-num-tag" class="text-amber-400 font-mono font-bold">10%</span>
+        </div>
+        <input id="volume-slider" type="range" min="0" max="100" value="10" oninput="changeVolume(this.value)" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400">
+        
+        <div class="flex justify-between items-center pt-2">
+          <span class="text-xs text-slate-400">ปิดเสียงเพลง (Mute)</span>
+          <button id="btn-mute-toggle" onclick="toggleMute()" class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 transition">
+            🔊 Sound ON
+          </button>
+        </div>
+      </div>
+
+      <div class="border-t border-slate-800 pt-3 flex justify-between items-center">
         <div>
           <p class="font-bold text-sm text-white">ระบบ Auto-Mark</p>
-          <p class="text-[11px] text-slate-400">กากบาทช่องที่ตรงกับ Call ให้อัตโนมัติ</p>
+          <p class="text-[11px] text-slate-400">กากบาทช่องให้อัตโนมัติ</p>
         </div>
         <label class="relative inline-flex items-center cursor-pointer select-none">
           <input type="checkbox" id="modal-auto-toggle" class="sr-only peer" onchange="toggleAutoFromModal(this.checked)">
@@ -408,6 +456,86 @@
     let masterColumnsData = null;
     let myName = '';
     let isHost = false;
+
+    // ระบบจัดการเสียง
+    const bgmAudio = document.getElementById('audio-bgm');
+    const winAudio = document.getElementById('audio-win');
+    let currentVol = 0.10; // Default 10%
+    let isMuted = false;
+
+    bgmAudio.volume = currentVol;
+    winAudio.volume = currentVol;
+
+    function playBGM() {
+      if (!isMuted) {
+        bgmAudio.play().catch(() => console.log('รอการคลิกจากผู้ใช้เพื่อเริ่มเสียงเพลงตามนโยบายบราวเซอร์'));
+      }
+    }
+
+    function stopBGM() {
+      bgmAudio.pause();
+      bgmAudio.currentTime = 0;
+    }
+
+    function changeVolume(val) {
+      currentVol = val / 100;
+      document.getElementById('volume-num-tag').innerText = `${val}%`;
+      if (!isMuted) {
+        bgmAudio.volume = currentVol;
+        winAudio.volume = currentVol;
+      }
+    }
+
+    function toggleMute() {
+      isMuted = !isMuted;
+      const btn = document.getElementById('btn-mute-toggle');
+      if (isMuted) {
+        bgmAudio.pause();
+        btn.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-rose-900 text-rose-200';
+        btn.innerText = '🔇 Muted';
+      } else {
+        bgmAudio.volume = currentVol;
+        winAudio.volume = currentVol;
+        btn.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-200';
+        btn.innerText = '🔊 Sound ON';
+        if (!document.getElementById('countdown-overlay').classList.contains('hidden') || !document.getElementById('winner-modal').classList.contains('hidden')) {
+          return;
+        }
+        playBGM();
+      }
+    }
+
+    // เสียง Cheer สำรองผ่าน Web Audio API
+    function playFallbackCheerSFX() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const bufferSize = ctx.sampleRate * 2.5;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.9));
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        const gain = ctx.createGain();
+        gain.gain.value = isMuted ? 0 : currentVol * 1.5;
+        noise.connect(gain);
+        gain.connect(ctx.destination);
+        noise.start();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function playVictorySFX() {
+      stopBGM();
+      if (isMuted) return;
+
+      winAudio.currentTime = 0;
+      winAudio.play().catch(() => {
+        playFallbackCheerSFX();
+      });
+    }
 
     window.onload = () => {
       const roomParam = new URLSearchParams(window.location.search).get('room');
@@ -583,9 +711,7 @@
       renderMasterBoard(masterColumns);
     });
 
-    // อัปเดตรายชื่อผู้เล่นที่รอก่อนเริ่มเกม
     socket.on('update-lobby-players', (playerNames) => {
-      // ฝั่ง Host
       const listDiv = document.getElementById('lobby-players-list');
       const badge = document.getElementById('lobby-player-count-badge');
       if (listDiv) {
@@ -602,7 +728,6 @@
         }
       }
 
-      // ฝั่ง Player Waiting Room
       const pwList = document.getElementById('pw-players-list');
       if (pwList) {
         pwList.innerHTML = playerNames.map(n => `
@@ -663,7 +788,6 @@
       document.getElementById('countdown-overlay').classList.add('hidden');
     });
 
-    // เริ่มเกมพร้อมกัน
     socket.on('game-started', () => {
       document.getElementById('countdown-overlay').classList.add('hidden');
 
@@ -673,6 +797,9 @@
         showView('player');
         renderPlayerCards();
       }
+
+      // เล่นเพลงประกอบอัตโนมัติ
+      playBGM();
     });
 
     function submitQRJoin() {
@@ -691,7 +818,6 @@
       socket.emit('join-room', { roomId: currentRoom, name });
     }
 
-    // Player เข้าร่วมสำเร็จ จะไปที่ Player Waiting Room ก่อนเสมอ
     socket.on('joined-success', ({ roomId, config, boards, drawn, status }) => {
       currentRoom = roomId;
       roomConfig = config;
@@ -702,6 +828,7 @@
       if (status === 'in-progress') {
         showView('player');
         renderPlayerCards();
+        playBGM();
       } else {
         showView('player-waiting');
         document.getElementById('pw-my-name').innerText = myName;
@@ -766,7 +893,6 @@
       document.getElementById('btn-stop-auto').className = 'bg-rose-600 text-white px-3.5 py-1 rounded-lg font-bold shadow';
     });
 
-    // Flow Restart Game: รีเซ็ตค่าทั้งหมดและพา Host + Player กลับไปยัง Waiting Room
     function restartGame() {
       if (confirm('คุณต้องการเริ่มรอบใหม่และพาผู้เล่นทุกคนกลับไปรอที่ Waiting Room ใช่หรือไม่?')) {
         socket.emit('restart-game', currentRoom);
@@ -774,13 +900,14 @@
     }
 
     socket.on('game-restarted', () => {
-      currentDrawn = []; // ล้างประวัติการ Call ออกจาก Client ทันที ป้องกันสีเหลืองตกค้าง
+      currentDrawn = [];
       winnersList = [];
+      stopBGM(); // หยุดเพลงเมื่อรีสตาร์ท
 
       document.getElementById('host-winners-count').innerText = '0';
-      document.getElementById('host-curr-letter').innerText = 'BINGO';
+      document.getElementById('host-curr-letter').innerText = '-';
       document.getElementById('host-curr-val').innerText = '-';
-      document.getElementById('host-prev-letter').innerText = 'PREV';
+      document.getElementById('host-prev-letter').innerText = '-';
       document.getElementById('host-prev-val').innerText = '-';
 
       const pHeadVal = document.getElementById('player-head-val');
@@ -793,7 +920,6 @@
       if (masterColumnsData) renderMasterBoard(masterColumnsData);
       closeWinnerModal();
 
-      // สลับหน้าจอผู้ใช้กลับไปยัง Waiting Room
       if (isHost) {
         showView('host-lobby');
       } else {
@@ -804,12 +930,12 @@
     socket.on('item-drawn', ({ item, history, previous }) => {
       currentDrawn = history;
 
-      // อัปเดต Host
-      document.getElementById('host-curr-letter').innerText = item.letter || 'DRAW';
+      // ปรับปรุงการแสดงผลให้ตัวอักษรอยู่ในวงกลม และข้อความคำอยู่ด้านข้าง ตัวใหญ่ ชัดเจน
+      document.getElementById('host-curr-letter').innerText = item.letter || '•';
       document.getElementById('host-curr-val').innerText = item.val;
 
       if (previous) {
-        document.getElementById('host-prev-letter').innerText = previous.letter || 'PREV';
+        document.getElementById('host-prev-letter').innerText = previous.letter || '•';
         document.getElementById('host-prev-val').innerText = previous.val;
       }
 
@@ -818,7 +944,6 @@
         mbItem.className = 'px-1.5 py-0.5 rounded text-white bg-indigo-600 font-bold line-through text-center shadow-md';
       }
 
-      // อัปเดต Player
       const pHeadCirc = document.getElementById('player-head-circle');
       if (pHeadCirc) pHeadCirc.innerText = item.letter || '•';
       const pHeadVal = document.getElementById('player-head-val');
@@ -879,7 +1004,6 @@
               return;
             }
 
-            // ตรวจสอบการออกเลขโดยอิงจาก currentDrawn ในรอบปัจจุบันเท่านั้น
             const isDrawn = currentDrawn.some(d => d.val === cell.val);
             const isMatchUnmarked = isDrawn && !cell.marked;
 
@@ -980,6 +1104,7 @@
       });
     });
 
+    // เมื่อมีคนชนะ: เด้ง Modal + ยิงพลุ + เล่นเสียงเอฟเฟกต์ดีใจ
     socket.on('game-over', ({ winner, winnersList: wList }) => {
       winnersList = wList || [];
       document.getElementById('host-winners-count').innerText = winnersList.length;
@@ -987,13 +1112,17 @@
 
       document.getElementById('winner-modal').classList.remove('hidden');
 
+      // ยิงพลุ Confetti
       if (typeof confetti === 'function') {
         confetti({
-          particleCount: 120,
-          spread: 80,
+          particleCount: 130,
+          spread: 85,
           origin: { y: 0.6 }
         });
       }
+
+      // เล่นเสียงเฮ/ชัยชนะทันที
+      playVictorySFX();
     });
 
     function closeWinnerModal() {
