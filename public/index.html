@@ -212,6 +212,32 @@
     </button>
   </div>
 
+  <div id="player-waiting-view" class="hidden bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl max-w-md w-full text-center space-y-6 my-4">
+    <div class="w-20 h-20 bg-indigo-950 border-2 border-indigo-500 rounded-full flex items-center justify-center mx-auto shadow-lg animate-pulse">
+      <span class="text-3xl">⏳</span>
+    </div>
+    <div>
+      <h2 class="text-2xl font-black text-white">คุณเข้าร่วมห้องแล้ว!</h2>
+      <p class="text-sm text-slate-400 mt-1">กรุณารอ Host กดเริ่มเกม...</p>
+    </div>
+
+    <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-left space-y-2">
+      <div class="flex justify-between text-xs">
+        <span class="text-slate-400">ชื่อของคุณ:</span>
+        <span id="pw-my-name" class="font-bold text-amber-400">-</span>
+      </div>
+      <div class="flex justify-between text-xs">
+        <span class="text-slate-400">รหัสห้อง:</span>
+        <span id="pw-room-code" class="font-mono font-bold text-white">-</span>
+      </div>
+    </div>
+
+    <div class="text-left bg-slate-950 p-4 rounded-2xl border border-slate-800">
+      <span class="text-xs text-slate-400 font-bold uppercase block mb-2">ผู้เล่นในห้องตอนนี้:</span>
+      <div id="pw-players-list" class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto"></div>
+    </div>
+  </div>
+
   <div id="qr-join-card" class="hidden bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center space-y-5">
     <h1 class="text-3xl font-black text-amber-400 tracking-wider">🎯 เข้าร่วมห้อง</h1>
     <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
@@ -380,6 +406,8 @@
     let isMonitorVisible = false;
     let isAutoDrawActive = false;
     let masterColumnsData = null;
+    let myName = '';
+    let isHost = false;
 
     window.onload = () => {
       const roomParam = new URLSearchParams(window.location.search).get('room');
@@ -395,12 +423,13 @@
     };
 
     function showView(viewId) {
-      ['landing-card', 'host-config-card', 'host-lobby-view', 'qr-join-card', 'manual-join-card', 'host-view', 'player-view'].forEach(id => {
+      ['landing-card', 'host-config-card', 'host-lobby-view', 'player-waiting-view', 'qr-join-card', 'manual-join-card', 'host-view', 'player-view'].forEach(id => {
         document.getElementById(id).classList.add('hidden');
       });
       if (viewId === 'landing') document.getElementById('landing-card').classList.remove('hidden');
       if (viewId === 'host-config') document.getElementById('host-config-card').classList.remove('hidden');
       if (viewId === 'host-lobby') document.getElementById('host-lobby-view').classList.remove('hidden');
+      if (viewId === 'player-waiting') document.getElementById('player-waiting-view').classList.remove('hidden');
       if (viewId === 'qr-join') document.getElementById('qr-join-card').classList.remove('hidden');
       if (viewId === 'manual-join') document.getElementById('manual-join-card').classList.remove('hidden');
       if (viewId === 'host') document.getElementById('host-view').classList.remove('hidden');
@@ -532,10 +561,10 @@
       socket.emit('create-room', config);
     }
 
-    // เมื่อสร้างห้องเสร็จ จะพามาที่หน้า Waiting Room (Lobby) เป็นอันดับแรก
     socket.on('room-created', ({ roomId, config, maxPlayers, totalCardsLimit, masterColumns }) => {
       currentRoom = roomId;
       masterColumnsData = masterColumns;
+      isHost = true;
 
       showView('host-lobby');
       document.getElementById('lobby-room-code').innerText = roomId;
@@ -549,30 +578,39 @@
         height: 170
       });
 
-      // จัดเตรียมข้อมูลหน้า Draw Panel รอไว้
       document.getElementById('host-disp-code').innerText = `ROOM: ${roomId}`;
       document.getElementById('host-status-players').innerText = `👥 0 / ${maxPlayers} (Cards: 0 / ${totalCardsLimit})`;
       renderMasterBoard(masterColumns);
     });
 
-    // อัปเดตรายชื่อผู้เล่นใน Waiting Room แบบสดๆ
+    // อัปเดตรายชื่อผู้เล่นที่รอก่อนเริ่มเกม
     socket.on('update-lobby-players', (playerNames) => {
+      // ฝั่ง Host
       const listDiv = document.getElementById('lobby-players-list');
       const badge = document.getElementById('lobby-player-count-badge');
-      if (!listDiv) return;
-
-      badge.innerText = `${playerNames.length} คน`;
-      if (playerNames.length === 0) {
-        listDiv.innerHTML = '<span class="text-xs text-slate-500 italic">กำลังรอผู้เล่นเข้าร่วม...</span>';
-        return;
+      if (listDiv) {
+        badge.innerText = `${playerNames.length} คน`;
+        if (playerNames.length === 0) {
+          listDiv.innerHTML = '<span class="text-xs text-slate-500 italic">กำลังรอผู้เล่นเข้าร่วม...</span>';
+        } else {
+          listDiv.innerHTML = playerNames.map(name => `
+            <span class="bg-indigo-950 border border-indigo-800 text-indigo-200 px-3 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+              ${name}
+            </span>
+          `).join('');
+        }
       }
 
-      listDiv.innerHTML = playerNames.map(name => `
-        <span class="bg-indigo-950 border border-indigo-800 text-indigo-200 px-3 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-          ${name}
-        </span>
-      `).join('');
+      // ฝั่ง Player Waiting Room
+      const pwList = document.getElementById('pw-players-list');
+      if (pwList) {
+        pwList.innerHTML = playerNames.map(n => `
+          <span class="bg-slate-900 border border-slate-800 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-bold">
+            ${n}
+          </span>
+        `).join('');
+      }
     });
 
     function renderMasterBoard(colsData) {
@@ -598,7 +636,6 @@
       });
     }
 
-    // Host เริ่มนับถอยหลัง 3-2-1
     function startCountdownGame() {
       socket.emit('start-game', currentRoom);
     }
@@ -615,8 +652,7 @@
       overlay.classList.remove('hidden');
       num.innerText = count;
 
-      // ตรวจสอบว่าเป็น Host หรือไม่ เพื่อให้สิทธิ์กด Cancel
-      if (!document.getElementById('host-lobby-view').classList.contains('hidden') || !document.getElementById('host-view').classList.contains('hidden')) {
+      if (isHost) {
         cancelBtn.classList.remove('hidden');
       } else {
         cancelBtn.classList.add('hidden');
@@ -627,18 +663,22 @@
       document.getElementById('countdown-overlay').classList.add('hidden');
     });
 
+    // เริ่มเกมพร้อมกัน
     socket.on('game-started', () => {
       document.getElementById('countdown-overlay').classList.add('hidden');
-      // Host จะเปลี่ยนจากหน้า Lobby เข้าสู่หน้า Draw Panel ทันที
-      if (!document.getElementById('host-lobby-view').classList.contains('hidden')) {
+
+      if (isHost) {
         showView('host');
+      } else {
+        showView('player');
+        renderPlayerCards();
       }
     });
 
-    // Player เข้าร่วมห้อง
     function submitQRJoin() {
       const name = document.getElementById('qr-name-input').value.trim();
       if (!name) return alert('กรุณากรอกชื่อ Player');
+      myName = name;
       socket.emit('join-room', { roomId: currentRoom, name });
     }
 
@@ -646,17 +686,27 @@
       const roomId = document.getElementById('manual-code-input').value.trim();
       const name = document.getElementById('manual-name-input').value.trim();
       if (!roomId || !name) return alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+      myName = name;
       currentRoom = roomId.toUpperCase();
       socket.emit('join-room', { roomId: currentRoom, name });
     }
 
-    socket.on('joined-success', ({ roomId, config, boards, drawn }) => {
+    // Player เข้าร่วมสำเร็จ จะไปที่ Player Waiting Room ก่อนเสมอ
+    socket.on('joined-success', ({ roomId, config, boards, drawn, status }) => {
       currentRoom = roomId;
       roomConfig = config;
       myBoards = boards;
       currentDrawn = drawn;
-      showView('player');
-      renderPlayerCards();
+      isHost = false;
+
+      if (status === 'in-progress') {
+        showView('player');
+        renderPlayerCards();
+      } else {
+        showView('player-waiting');
+        document.getElementById('pw-my-name').innerText = myName;
+        document.getElementById('pw-room-code').innerText = roomId;
+      }
     });
 
     function openSettingsModal() { document.getElementById('settings-modal').classList.remove('hidden'); }
@@ -683,7 +733,6 @@
       socket.emit('draw-item', currentRoom);
     }
 
-    // Auto Draw และการเปลี่ยนเวลาแบบเรียลไทม์
     function toggleAutoDraw(start) {
       if (start) {
         const sec = document.getElementById('auto-draw-time').value;
@@ -717,16 +766,17 @@
       document.getElementById('btn-stop-auto').className = 'bg-rose-600 text-white px-3.5 py-1 rounded-lg font-bold shadow';
     });
 
-    // ปุ่ม Restart Game
+    // Flow Restart Game: รีเซ็ตค่าทั้งหมดและพา Host + Player กลับไปยัง Waiting Room
     function restartGame() {
-      if (confirm('คุณต้องการรีเซ็ตประวัติและเริ่มรอบใหม่ให้ทุกคนใช่หรือไม่?')) {
+      if (confirm('คุณต้องการเริ่มรอบใหม่และพาผู้เล่นทุกคนกลับไปรอที่ Waiting Room ใช่หรือไม่?')) {
         socket.emit('restart-game', currentRoom);
       }
     }
 
     socket.on('game-restarted', () => {
-      currentDrawn = [];
+      currentDrawn = []; // ล้างประวัติการ Call ออกจาก Client ทันที ป้องกันสีเหลืองตกค้าง
       winnersList = [];
+
       document.getElementById('host-winners-count').innerText = '0';
       document.getElementById('host-curr-letter').innerText = 'BINGO';
       document.getElementById('host-curr-val').innerText = '-';
@@ -742,7 +792,13 @@
 
       if (masterColumnsData) renderMasterBoard(masterColumnsData);
       closeWinnerModal();
-      alert('รอบใหม่เริ่มต้นแล้ว! การ์ดถูกสุ่มใหม่เรียบร้อย');
+
+      // สลับหน้าจอผู้ใช้กลับไปยัง Waiting Room
+      if (isHost) {
+        showView('host-lobby');
+      } else {
+        showView('player-waiting');
+      }
     });
 
     socket.on('item-drawn', ({ item, history, previous }) => {
@@ -757,7 +813,6 @@
         document.getElementById('host-prev-val').innerText = previous.val;
       }
 
-      // ไฮไลต์คำใน Master Board โทน Dark
       const mbItem = document.getElementById(`mb-item-${item.val}`);
       if (mbItem) {
         mbItem.className = 'px-1.5 py-0.5 rounded text-white bg-indigo-600 font-bold line-through text-center shadow-md';
@@ -792,7 +847,6 @@
       renderPlayerCards();
     });
 
-    // Render การ์ด Player สไตล์ Minimal Clean Card ขอบดำตามภาพ
     function renderPlayerCards() {
       const stack = document.getElementById('player-cards-stack');
       if (!stack) return;
@@ -825,6 +879,7 @@
               return;
             }
 
+            // ตรวจสอบการออกเลขโดยอิงจาก currentDrawn ในรอบปัจจุบันเท่านั้น
             const isDrawn = currentDrawn.some(d => d.val === cell.val);
             const isMatchUnmarked = isDrawn && !cell.marked;
 
@@ -866,7 +921,6 @@
       });
     }
 
-    // Host Dashboard
     socket.on('update-players-dashboard', ({ players, usedCards, totalCardsLimit, maxPlayers }) => {
       const pCountTag = document.getElementById('host-status-players');
       if (pCountTag) {
@@ -926,7 +980,6 @@
       });
     });
 
-    // แสดง Pop-up ผู้ชนะกลางจอพร้อมเอฟเฟกต์พลุ Confetti
     socket.on('game-over', ({ winner, winnersList: wList }) => {
       winnersList = wList || [];
       document.getElementById('host-winners-count').innerText = winnersList.length;
@@ -934,7 +987,6 @@
 
       document.getElementById('winner-modal').classList.remove('hidden');
 
-      // ยิงพลุกระดาษเฉลิมฉลอง
       if (typeof confetti === 'function') {
         confetti({
           particleCount: 120,
