@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Real-time Bingo</title>
+  <title>Real-time Bingo Live</title>
+  <meta name="description" content="เว็บบิงโกออนไลน์สำหรับห้องเรียนและปาร์ตี้ เล่นฟรีแบบ Real-time">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -36,6 +37,15 @@
     }
     .winner-box-glow {
       animation: neonGlow 1.5s infinite alternate ease-in-out;
+    }
+
+    /* ซ่อน Scrollbar ของแถบประวัติให้ดูเนียนตา */
+    #player-history-strip::-webkit-scrollbar {
+      display: none;
+    }
+    #player-history-strip {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
     }
   </style>
 </head>
@@ -274,7 +284,7 @@
 
   <!-- ==================== 7. Host View ==================== -->
   <div id="host-view" class="hidden w-full max-w-7xl space-y-4 my-4">
-    <!-- แถบด้านบน: แยกวงกลมอักษรและข้อความชัดเจนตามรูปตัวอย่าง -->
+    <!-- แถบด้านบน: แยกวงกลมอักษรและข้อความเต็มชัดเจน -->
     <div class="grid grid-cols-1 sm:grid-cols-2 bg-[#1e293b] border border-slate-800 text-white rounded-t-2xl overflow-hidden shadow-2xl divide-y sm:divide-y-0 sm:divide-x divide-slate-800">
       <!-- CURRENT DRAW -->
       <div class="flex flex-col">
@@ -401,7 +411,7 @@
     <div id="player-cards-stack" class="space-y-4"></div>
   </div>
 
-  <!-- ==================== Settings Modal พร้อมแถบปรับเสียง ==================== -->
+  <!-- ==================== Settings Modal ==================== -->
   <div id="settings-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-xs w-full space-y-5 shadow-2xl">
       <div class="flex justify-between items-center border-b border-slate-800 pb-3">
@@ -409,7 +419,7 @@
         <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white text-sm font-bold">✕</button>
       </div>
 
-      <!-- ปรับความดังเพลง BGM -->
+      <!-- ปรับระดับเสียง BGM -->
       <div class="space-y-2">
         <div class="flex justify-between items-center text-xs">
           <span class="font-bold text-white">🎵 ความดังเสียงเพลง (BGM)</span>
@@ -457,18 +467,32 @@
     let myName = '';
     let isHost = false;
 
-    // ระบบจัดการเสียง
+    // ระบบจัดการเสียงและ Loop
     const bgmAudio = document.getElementById('audio-bgm');
     const winAudio = document.getElementById('audio-win');
     let currentVol = 0.10; // Default 10%
     let isMuted = false;
 
+    bgmAudio.loop = true;
     bgmAudio.volume = currentVol;
     winAudio.volume = currentVol;
 
+    // บังคับ Loop ซ้ำอีกชั้นผ่าน Event
+    bgmAudio.addEventListener('ended', () => {
+      if (!isMuted) {
+        bgmAudio.currentTime = 0;
+        bgmAudio.play().catch(e => console.error(e));
+      }
+    });
+
     function playBGM() {
       if (!isMuted) {
-        bgmAudio.play().catch(() => console.log('รอการคลิกจากผู้ใช้เพื่อเริ่มเสียงเพลงตามนโยบายบราวเซอร์'));
+        bgmAudio.currentTime = 0;
+        bgmAudio.loop = true;
+        const p = bgmAudio.play();
+        if (p !== undefined) {
+          p.catch(() => console.log('User interaction needed to play audio'));
+        }
       }
     }
 
@@ -498,14 +522,12 @@
         winAudio.volume = currentVol;
         btn.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-200';
         btn.innerText = '🔊 Sound ON';
-        if (!document.getElementById('countdown-overlay').classList.contains('hidden') || !document.getElementById('winner-modal').classList.contains('hidden')) {
-          return;
+        if (document.getElementById('countdown-overlay').classList.contains('hidden') && document.getElementById('winner-modal').classList.contains('hidden')) {
+          playBGM();
         }
-        playBGM();
       }
     }
 
-    // เสียง Cheer สำรองผ่าน Web Audio API
     function playFallbackCheerSFX() {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -530,11 +552,8 @@
     function playVictorySFX() {
       stopBGM();
       if (isMuted) return;
-
       winAudio.currentTime = 0;
-      winAudio.play().catch(() => {
-        playFallbackCheerSFX();
-      });
+      winAudio.play().catch(() => playFallbackCheerSFX());
     }
 
     window.onload = () => {
@@ -798,7 +817,6 @@
         renderPlayerCards();
       }
 
-      // เล่นเพลงประกอบอัตโนมัติ
       playBGM();
     });
 
@@ -902,7 +920,7 @@
     socket.on('game-restarted', () => {
       currentDrawn = [];
       winnersList = [];
-      stopBGM(); // หยุดเพลงเมื่อรีสตาร์ท
+      stopBGM();
 
       document.getElementById('host-winners-count').innerText = '0';
       document.getElementById('host-curr-letter').innerText = '-';
@@ -930,7 +948,6 @@
     socket.on('item-drawn', ({ item, history, previous }) => {
       currentDrawn = history;
 
-      // ปรับปรุงการแสดงผลให้ตัวอักษรอยู่ในวงกลม และข้อความคำอยู่ด้านข้าง ตัวใหญ่ ชัดเจน
       document.getElementById('host-curr-letter').innerText = item.letter || '•';
       document.getElementById('host-curr-val').innerText = item.val;
 
@@ -972,6 +989,7 @@
       renderPlayerCards();
     });
 
+    // แสดงกระดาน Player พร้อมตัดคำไม่ให้ล้นช่อง
     function renderPlayerCards() {
       const stack = document.getElementById('player-cards-stack');
       if (!stack) return;
@@ -993,13 +1011,13 @@
         cardBox.appendChild(headerGrid);
 
         const gridDiv = document.createElement('div');
-        gridDiv.className = `grid grid-cols-${board.cols} divide-x-2 divide-y-2 divide-black border-collapse text-black font-black`;
+        gridDiv.className = `grid grid-cols-${board.cols} divide-x-2 divide-y-2 divide-black border-collapse text-black font-black table-fixed w-full`;
 
         board.grid.forEach((row, r) => {
           row.forEach((cell, c) => {
             const btn = document.createElement('button');
             if (cell.isBlank) {
-              btn.className = 'h-16 bg-slate-100 border-none cursor-default';
+              btn.className = 'h-16 sm:h-20 bg-slate-100 border-none cursor-default w-full';
               gridDiv.appendChild(btn);
               return;
             }
@@ -1007,14 +1025,14 @@
             const isDrawn = currentDrawn.some(d => d.val === cell.val);
             const isMatchUnmarked = isDrawn && !cell.marked;
 
-            let cls = 'h-16 sm:h-20 flex flex-col items-center justify-center p-1 text-center font-black transition-all text-xs sm:text-sm relative ';
+            let cls = 'h-16 sm:h-20 w-full max-w-full overflow-hidden flex flex-col items-center justify-center p-1 text-center font-black transition-all relative ';
 
             if (cell.marked) {
               cls += 'bg-emerald-500 text-white cursor-default ';
             } else if (isMatchUnmarked) {
               cls += 'match-pulse-glow ';
             } else {
-              cls += 'bg-white text-slate-700 cursor-not-allowed ';
+              cls += 'bg-white text-slate-800 cursor-not-allowed ';
             }
 
             btn.className = cls;
@@ -1022,14 +1040,18 @@
             if (cell.isFree) {
               btn.innerHTML = `
                 <div class="flex flex-col items-center justify-center text-slate-400">
-                  <svg class="w-8 h-8 ${cell.marked ? 'text-white' : 'text-slate-300'}" fill="currentColor" viewBox="0 0 24 24">
+                  <svg class="w-7 h-7 sm:w-8 sm:h-8 ${cell.marked ? 'text-white' : 'text-slate-300'}" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                   </svg>
                   <span class="text-[10px] font-bold uppercase mt-0.5 ${cell.marked ? 'text-white' : 'text-slate-500'}">Free</span>
                 </div>
               `;
             } else {
-              btn.innerText = cell.val;
+              btn.innerHTML = `
+                <span class="w-full max-w-full px-0.5 break-all break-words leading-tight line-clamp-3 text-[11px] sm:text-xs">
+                  ${cell.val}
+                </span>
+              `;
             }
 
             if ((isDrawn || cell.isFree) && !cell.marked) {
@@ -1104,7 +1126,6 @@
       });
     });
 
-    // เมื่อมีคนชนะ: เด้ง Modal + ยิงพลุ + เล่นเสียงเอฟเฟกต์ดีใจ
     socket.on('game-over', ({ winner, winnersList: wList }) => {
       winnersList = wList || [];
       document.getElementById('host-winners-count').innerText = winnersList.length;
@@ -1112,7 +1133,6 @@
 
       document.getElementById('winner-modal').classList.remove('hidden');
 
-      // ยิงพลุ Confetti
       if (typeof confetti === 'function') {
         confetti({
           particleCount: 130,
@@ -1121,7 +1141,6 @@
         });
       }
 
-      // เล่นเสียงเฮ/ชัยชนะทันที
       playVictorySFX();
     });
 
