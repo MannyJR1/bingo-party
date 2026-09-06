@@ -227,8 +227,10 @@ io.on('connection', (socket) => {
       status: room.status
     });
 
-    // ส่งอัปเดตไป Lobby & Monitor ของ Host
-    io.to(room.host).emit('update-lobby-players', Object.values(room.players).map(p => p.name));
+    // ส่งอัปเดตรายชื่อผู้เล่นไปทั้งห้อง
+    const playerNames = Object.values(room.players).map(p => p.name);
+    io.to(roomId).emit('update-lobby-players', playerNames);
+
     io.to(room.host).emit('update-players-dashboard', {
       players: Object.values(room.players),
       usedCards: room.usedCardsCount,
@@ -237,7 +239,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Host กด Start Game (นับถอยหลัง 3-2-1)
+  // Host กด Start Game
   socket.on('start-game', (roomId) => {
     const room = rooms[roomId];
     if (!room || room.host !== socket.id || room.status !== 'waiting') return;
@@ -259,7 +261,7 @@ io.on('connection', (socket) => {
     }, 1000);
   });
 
-  // Host กดยกเลิกการนับถอยหลัง Cancel
+  // Host กดยกเลิกการเริ่มเกมระหว่างนับถอยหลัง
   socket.on('cancel-countdown', (roomId) => {
     const room = rooms[roomId];
     if (!room || room.host !== socket.id || room.status !== 'countdown') return;
@@ -272,7 +274,6 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('countdown-cancelled');
   });
 
-  // ฟังก์ชันส่วนกลางสำหรับการ Draw
   function performDraw(roomId) {
     const room = rooms[roomId];
     if (!room || room.available.length === 0) {
@@ -329,7 +330,6 @@ io.on('connection', (socket) => {
       maxPlayers: room.maxPlayers
     });
 
-    // หากมีผู้ชนะ และตั้งค่า Stop When Winning ให้สั่งหยุด Auto Draw ทันที
     if (winnerFound && room.stopOnWinning) {
       if (room.autoDrawInterval) {
         clearInterval(room.autoDrawInterval);
@@ -341,14 +341,12 @@ io.on('connection', (socket) => {
     return { item, winnerFound };
   }
 
-  // Host กด Call แบบ Manual
   socket.on('draw-item', (roomId) => {
     const room = rooms[roomId];
     if (!room || room.host !== socket.id) return;
     performDraw(roomId);
   });
 
-  // Host จัดการระบบ Auto Draw
   socket.on('start-auto-draw', ({ roomId, intervalSec, stopOnWin }) => {
     const room = rooms[roomId];
     if (!room || room.host !== socket.id) return;
@@ -365,7 +363,6 @@ io.on('connection', (socket) => {
     socket.emit('auto-draw-started');
   });
 
-  // ปรับเปลี่ยนช่วงเวลา Auto Draw ทันทีขณะกำลังรันอยู่
   socket.on('change-auto-interval', ({ roomId, intervalSec }) => {
     const room = rooms[roomId];
     if (!room || room.host !== socket.id) return;
@@ -390,7 +387,7 @@ io.on('connection', (socket) => {
     socket.emit('auto-draw-stopped');
   });
 
-  // Host กด Restart Game ล้างกระดานและเริ่มรอบใหม่
+  // Host กด Restart Game (รีเซ็ตสถานะกลับ waiting และล้างการ์ดทุกคน)
   socket.on('restart-game', (roomId) => {
     const room = rooms[roomId];
     if (!room || room.host !== socket.id) return;
@@ -405,8 +402,9 @@ io.on('connection', (socket) => {
     room.available = [...pool];
     room.drawn = [];
     room.winners = [];
+    room.status = 'waiting'; // ปลดล็อกห้องให้คนอื่นเข้าได้
 
-    // สร้างการ์ดใบใหม่ให้ผู้เล่นเดิมทุกคน
+    // สุ่มการ์ดใหม่ให้ผู้เล่นเดิมทุกคน
     Object.values(room.players).forEach(p => {
       const newBoards = [];
       for (let i = 0; i < room.cardsPerPlayer; i++) {
@@ -418,10 +416,14 @@ io.on('connection', (socket) => {
       p.boards = newBoards;
       p.hasWon = false;
       io.to(p.id).emit('boards-updated', p.boards);
-      io.to(p.id).emit('game-restarted');
     });
 
+    // สั่งทั้งห้องกลับไปยังหน้า Waiting Room
     io.to(roomId).emit('game-restarted');
+
+    const playerNames = Object.values(room.players).map(p => p.name);
+    io.to(roomId).emit('update-lobby-players', playerNames);
+
     io.to(room.host).emit('update-players-dashboard', {
       players: Object.values(room.players),
       usedCards: room.usedCardsCount,
@@ -430,7 +432,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Player กดกากบาทช่อง (ล็อกถาวร)
   socket.on('mark-cell', ({ roomId, boardIdx, r, c }) => {
     const room = rooms[roomId];
     if (!room || !room.players[socket.id]) return;
@@ -469,7 +470,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // สลับ Auto Mark ใน Setting
   socket.on('toggle-auto', ({ roomId, enabled }) => {
     const room = rooms[roomId];
     if (room && room.players[socket.id]) {
@@ -519,7 +519,8 @@ io.on('connection', (socket) => {
       if (room.players[socket.id]) {
         room.usedCardsCount -= room.cardsPerPlayer;
         delete room.players[socket.id];
-        io.to(room.host).emit('update-lobby-players', Object.values(room.players).map(p => p.name));
+        const playerNames = Object.values(room.players).map(p => p.name);
+        io.to(roomId).emit('update-lobby-players', playerNames);
         io.to(room.host).emit('update-players-dashboard', {
           players: Object.values(room.players),
           usedCards: room.usedCardsCount,
