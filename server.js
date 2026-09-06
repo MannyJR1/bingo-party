@@ -17,8 +17,38 @@ function getColumnLetter(colIndex, customHeaders) {
   return defaultLetters[colIndex] || '•';
 }
 
-function generateSingleBoard(config) {
-  const { mode, customWords, freeText, gridDim, includeFree, headers } = config;
+function initMasterPool(config) {
+  const hdrs = config.headers || ['B', 'I', 'N', 'G', 'O'];
+  let masterColumns = {};
+  hdrs.forEach(h => masterColumns[h] = []);
+  let pool = [];
+
+  if (config.mode === '1-75') {
+    masterColumns['B'] = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 1), letter: 'B' }));
+    masterColumns['I'] = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 16), letter: 'I' }));
+    masterColumns['N'] = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 31), letter: 'N' }));
+    masterColumns['G'] = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 46), letter: 'G' }));
+    masterColumns['O'] = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 61), letter: 'O' }));
+    pool = [...masterColumns['B'], ...masterColumns['I'], ...masterColumns['N'], ...masterColumns['G'], ...masterColumns['O']];
+  } else if (config.mode === '1-90') {
+    pool = Array.from({ length: 90 }, (_, i) => ({ val: String(i + 1), letter: '' }));
+  } else {
+    // Custom Words: แบ่งคำผูกตายตัวกับแต่ละคอลัมน์ตามลำดับบรรทัด
+    config.customWords.forEach((word, idx) => {
+      const colLetter = hdrs[idx % hdrs.length];
+      const item = { val: word, letter: colLetter };
+      if (!masterColumns[colLetter]) masterColumns[colLetter] = [];
+      masterColumns[colLetter].push(item);
+      pool.push(item);
+    });
+  }
+
+  return { pool, masterColumns };
+}
+
+function generateSingleBoard(config, masterColumns) {
+  const { mode, freeText, gridDim, includeFree, headers } = config;
+  const hdrs = headers || ['B', 'I', 'N', 'G', 'O'];
 
   if (mode === '1-75') {
     const cols = [
@@ -32,7 +62,7 @@ function generateSingleBoard(config) {
     for (let r = 0; r < 5; r++) {
       grid[r] = [];
       for (let c = 0; c < 5; c++) {
-        const colLetter = getColumnLetter(c, headers);
+        const colLetter = getColumnLetter(c, hdrs);
         if (r === 2 && c === 2 && includeFree) {
           grid[r][c] = { val: freeText || 'Free', letter: colLetter, marked: true, isFree: true };
         } else {
@@ -62,28 +92,30 @@ function generateSingleBoard(config) {
     return { grid, rows: 3, cols: 9 };
   }
 
-  // Custom Bingo
+  // Custom Bingo: สุ่มคำจากคอลัมน์ของตัวเองเท่านั้น ทำให้ตัวอักษรหัวแถวตรงกันเสมอ
   const size = parseInt(gridDim) || 5;
-  const needed = size * size;
-  let pool = [...customWords];
-  while (pool.length < needed) {
-    pool.push(`Item ${pool.length + 1}`);
-  }
-  const shuffled = pool.sort(() => 0.5 - Math.random());
-  const grid = [];
-  let idx = 0;
-  for (let r = 0; r < size; r++) {
-    grid[r] = [];
-    for (let c = 0; c < size; c++) {
-      const colLetter = getColumnLetter(c, headers);
+  const grid = Array.from({ length: size }, () => []);
+
+  for (let c = 0; c < size; c++) {
+    const colLetter = getColumnLetter(c, hdrs);
+    const colPool = masterColumns && masterColumns[colLetter] ? [...masterColumns[colLetter]] : [];
+    
+    // สับเฉพาะคำในคอลัมน์นี้
+    const shuffledCol = colPool.sort(() => 0.5 - Math.random());
+    let poolIdx = 0;
+
+    for (let r = 0; r < size; r++) {
       const isCenter = size % 2 === 1 && r === Math.floor(size / 2) && c === Math.floor(size / 2);
       if (isCenter && includeFree) {
         grid[r][c] = { val: freeText || 'Free', letter: colLetter, marked: true, isFree: true };
       } else {
-        grid[r][c] = { val: shuffled[idx++], letter: colLetter, marked: false, isFree: false };
+        const val = shuffledCol[poolIdx] ? shuffledCol[poolIdx].val : `${colLetter} ${poolIdx + 1}`;
+        poolIdx++;
+        grid[r][c] = { val, letter: colLetter, marked: false, isFree: false };
       }
     }
   }
+
   return { grid, rows: size, cols: size };
 }
 
@@ -125,33 +157,7 @@ function calculateMinToGo(boardData) {
   return minToGo;
 }
 
-function initMasterPool(config) {
-  let masterColumns = { B: [], I: [], N: [], G: [], O: [] };
-  let pool = [];
-
-  if (config.mode === '1-75') {
-    masterColumns.B = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 1), letter: 'B' }));
-    masterColumns.I = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 16), letter: 'I' }));
-    masterColumns.N = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 31), letter: 'N' }));
-    masterColumns.G = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 46), letter: 'G' }));
-    masterColumns.O = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 61), letter: 'O' }));
-    pool = [...masterColumns.B, ...masterColumns.I, ...masterColumns.N, ...masterColumns.G, ...masterColumns.O];
-  } else if (config.mode === '1-90') {
-    pool = Array.from({ length: 90 }, (_, i) => ({ val: String(i + 1), letter: '' }));
-  } else {
-    const hdrs = config.headers || ['B', 'I', 'N', 'G', 'O'];
-    config.customWords.forEach((word, idx) => {
-      const letter = hdrs[idx % hdrs.length] || '•';
-      pool.push({ val: word, letter });
-      if (masterColumns[letter]) masterColumns[letter].push({ val: word, letter });
-    });
-  }
-
-  return { pool, masterColumns };
-}
-
 io.on('connection', (socket) => {
-  // Host สร้างห้อง
   socket.on('create-room', (config) => {
     const { pool, masterColumns } = initMasterPool(config);
 
@@ -171,7 +177,7 @@ io.on('connection', (socket) => {
       available: [...pool],
       drawn: [],
       players: {},
-      status: 'waiting', // 'waiting', 'countdown', 'in-progress'
+      status: 'waiting',
       countdownTimer: null,
       autoDrawInterval: null,
       autoDrawTimeSec: 7,
@@ -190,7 +196,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Player เข้าร่วมห้อง
   socket.on('join-room', ({ roomId, name }) => {
     roomId = (roomId || '').toUpperCase();
     const room = rooms[roomId];
@@ -203,7 +208,7 @@ io.on('connection', (socket) => {
 
     const boards = [];
     for (let i = 0; i < room.cardsPerPlayer; i++) {
-      const b = generateSingleBoard(room.config);
+      const b = generateSingleBoard(room.config, room.masterColumns);
       b.id = i;
       b.minToGo = calculateMinToGo(b);
       boards.push(b);
@@ -227,7 +232,6 @@ io.on('connection', (socket) => {
       status: room.status
     });
 
-    // ส่งอัปเดตรายชื่อผู้เล่นไปทั้งห้อง
     const playerNames = Object.values(room.players).map(p => p.name);
     io.to(roomId).emit('update-lobby-players', playerNames);
 
@@ -239,7 +243,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Host กด Start Game
   socket.on('start-game', (roomId) => {
     const room = rooms[roomId];
     if (!room || room.host !== socket.id || room.status !== 'waiting') return;
@@ -261,7 +264,6 @@ io.on('connection', (socket) => {
     }, 1000);
   });
 
-  // Host กดยกเลิกการเริ่มเกมระหว่างนับถอยหลัง
   socket.on('cancel-countdown', (roomId) => {
     const room = rooms[roomId];
     if (!room || room.host !== socket.id || room.status !== 'countdown') return;
@@ -387,7 +389,6 @@ io.on('connection', (socket) => {
     socket.emit('auto-draw-stopped');
   });
 
-  // Host กด Restart Game (รีเซ็ตสถานะกลับ waiting และล้างการ์ดทุกคน)
   socket.on('restart-game', (roomId) => {
     const room = rooms[roomId];
     if (!room || room.host !== socket.id) return;
@@ -402,13 +403,12 @@ io.on('connection', (socket) => {
     room.available = [...pool];
     room.drawn = [];
     room.winners = [];
-    room.status = 'waiting'; // ปลดล็อกห้องให้คนอื่นเข้าได้
+    room.status = 'waiting';
 
-    // สุ่มการ์ดใหม่ให้ผู้เล่นเดิมทุกคน
     Object.values(room.players).forEach(p => {
       const newBoards = [];
       for (let i = 0; i < room.cardsPerPlayer; i++) {
-        const b = generateSingleBoard(room.config);
+        const b = generateSingleBoard(room.config, room.masterColumns);
         b.id = i;
         b.minToGo = calculateMinToGo(b);
         newBoards.push(b);
@@ -418,7 +418,6 @@ io.on('connection', (socket) => {
       io.to(p.id).emit('boards-updated', p.boards);
     });
 
-    // สั่งทั้งห้องกลับไปยังหน้า Waiting Room
     io.to(roomId).emit('game-restarted');
 
     const playerNames = Object.values(room.players).map(p => p.name);
