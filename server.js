@@ -11,9 +11,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
 
-// สุ่มสร้างตารางการ์ดบิงโก 1 ใบ
+function getColumnLetter(colIndex, customHeaders) {
+  const defaultLetters = ['B', 'I', 'N', 'G', 'O'];
+  if (customHeaders && customHeaders[colIndex]) return customHeaders[colIndex];
+  return defaultLetters[colIndex] || '•';
+}
+
 function generateSingleBoard(config) {
-  const { mode, customWords, freeText, gridDim, includeFree } = config;
+  const { mode, customWords, freeText, gridDim, includeFree, headers } = config;
 
   if (mode === '1-75') {
     const cols = [
@@ -27,12 +32,13 @@ function generateSingleBoard(config) {
     for (let r = 0; r < 5; r++) {
       grid[r] = [];
       for (let c = 0; c < 5; c++) {
+        const colLetter = getColumnLetter(c, headers);
         if (r === 2 && c === 2 && includeFree) {
-          grid[r][c] = { val: freeText || 'FREE', marked: true, isFree: true };
+          grid[r][c] = { val: freeText || 'Free', letter: colLetter, marked: true, isFree: true };
         } else {
           const pool = cols[c];
           const randIdx = Math.floor(Math.random() * pool.length);
-          grid[r][c] = { val: pool.splice(randIdx, 1)[0], marked: false, isFree: false };
+          grid[r][c] = { val: pool.splice(randIdx, 1)[0], letter: colLetter, marked: false, isFree: false };
         }
       }
     }
@@ -40,7 +46,7 @@ function generateSingleBoard(config) {
   }
 
   if (mode === '1-90') {
-    const grid = Array.from({ length: 3 }, () => Array(9).fill(null).map(() => ({ val: '', marked: false, isBlank: true })));
+    const grid = Array.from({ length: 3 }, () => Array(9).fill(null).map(() => ({ val: '', letter: '', marked: false, isBlank: true })));
     const colRanges = [
       [1, 9], [10, 19], [20, 29], [30, 39], [40, 49],
       [50, 59], [60, 69], [70, 79], [80, 90]
@@ -50,7 +56,7 @@ function generateSingleBoard(config) {
       colIndices.forEach(c => {
         const [min, max] = colRanges[c];
         const num = Math.floor(Math.random() * (max - min + 1)) + min;
-        grid[r][c] = { val: String(num), marked: false, isBlank: false };
+        grid[r][c] = { val: String(num), letter: '', marked: false, isBlank: false };
       });
     }
     return { grid, rows: 3, cols: 9 };
@@ -69,18 +75,18 @@ function generateSingleBoard(config) {
   for (let r = 0; r < size; r++) {
     grid[r] = [];
     for (let c = 0; c < size; c++) {
+      const colLetter = getColumnLetter(c, headers);
       const isCenter = size % 2 === 1 && r === Math.floor(size / 2) && c === Math.floor(size / 2);
       if (isCenter && includeFree) {
-        grid[r][c] = { val: freeText || 'FREE', marked: true, isFree: true };
+        grid[r][c] = { val: freeText || 'Free', letter: colLetter, marked: true, isFree: true };
       } else {
-        grid[r][c] = { val: shuffled[idx++], marked: false, isFree: false };
+        grid[r][c] = { val: shuffled[idx++], letter: colLetter, marked: false, isFree: false };
       }
     }
   }
   return { grid, rows: size, cols: size };
 }
 
-// ตรวจสอบจำนวนช่องที่ขาดก่อน Bingo (To-Go count)
 function calculateMinToGo(boardData) {
   const { grid, rows, cols } = boardData;
 
@@ -95,12 +101,10 @@ function calculateMinToGo(boardData) {
   }
 
   let minToGo = rows;
-  // แนวนอน
   for (let r = 0; r < rows; r++) {
     const un = grid[r].filter(cell => !cell.marked).length;
     if (un < minToGo) minToGo = un;
   }
-  // แนวตั้ง
   for (let c = 0; c < cols; c++) {
     let un = 0;
     for (let r = 0; r < rows; r++) {
@@ -108,7 +112,6 @@ function calculateMinToGo(boardData) {
     }
     if (un < minToGo) minToGo = un;
   }
-  // ทแยงมุม
   if (rows === cols) {
     let d1 = 0, d2 = 0;
     for (let i = 0; i < rows; i++) {
@@ -125,20 +128,32 @@ function calculateMinToGo(boardData) {
 io.on('connection', (socket) => {
   // Host สร้างห้อง
   socket.on('create-room', (config) => {
+    let masterColumns = { B: [], I: [], N: [], G: [], O: [] };
     let pool = [];
+
     if (config.mode === '1-75') {
-      pool = Array.from({ length: 75 }, (_, i) => String(i + 1));
+      masterColumns.B = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 1), letter: 'B' }));
+      masterColumns.I = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 16), letter: 'I' }));
+      masterColumns.N = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 31), letter: 'N' }));
+      masterColumns.G = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 46), letter: 'G' }));
+      masterColumns.O = Array.from({ length: 15 }, (_, i) => ({ val: String(i + 61), letter: 'O' }));
+      pool = [...masterColumns.B, ...masterColumns.I, ...masterColumns.N, ...masterColumns.G, ...masterColumns.O];
     } else if (config.mode === '1-90') {
-      pool = Array.from({ length: 90 }, (_, i) => String(i + 1));
+      pool = Array.from({ length: 90 }, (_, i) => ({ val: String(i + 1), letter: '' }));
     } else {
-      pool = [...new Set(config.customWords)];
+      const hdrs = config.headers || ['B', 'I', 'N', 'G', 'O'];
+      config.customWords.forEach((word, idx) => {
+        const letter = hdrs[idx % hdrs.length] || '•';
+        pool.push({ val: word, letter });
+        if (masterColumns[letter]) masterColumns[letter].push({ val: word, letter });
+      });
     }
 
     const cardsPerPlayer = parseInt(config.cardsPerPlayer) || 1;
     const totalCardsLimit = parseInt(config.totalCardsLimit) || 30;
     const maxPlayers = Math.floor(totalCardsLimit / cardsPerPlayer);
-
     const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
+
     rooms[roomId] = {
       host: socket.id,
       config,
@@ -149,7 +164,12 @@ io.on('connection', (socket) => {
       pool,
       available: [...pool],
       drawn: [],
-      players: {}
+      players: {},
+      status: 'waiting', // 'waiting', 'countdown', 'in-progress'
+      countdownTimer: null,
+      autoDrawInterval: null,
+      winners: [],
+      masterColumns
     };
 
     socket.join(roomId);
@@ -157,7 +177,8 @@ io.on('connection', (socket) => {
       roomId,
       config,
       maxPlayers,
-      totalCardsLimit
+      totalCardsLimit,
+      masterColumns
     });
   });
 
@@ -166,16 +187,12 @@ io.on('connection', (socket) => {
     roomId = (roomId || '').toUpperCase();
     const room = rooms[roomId];
 
-    if (!room) {
-      return socket.emit('error-msg', 'ไม่พบรหัสห้องนี้ในระบบ');
-    }
-
-    // ตรวจสอบโควตาการ์ดรวมของห้อง
+    if (!room) return socket.emit('error-msg', 'ไม่พบรหัสห้องนี้ในระบบ');
+    if (room.status === 'in-progress') return socket.emit('error-msg', 'เกมเริ่มไปแล้ว ไม่สามารถเข้าร่วมได้');
     if (room.usedCardsCount + room.cardsPerPlayer > room.totalCardsLimit) {
       return socket.emit('error-msg', 'ห้องเต็มแล้ว (Bingo Cards หมดแล้ว)');
     }
 
-    // สร้างการ์ดตามจำนวนที่ Host กำหนดต่อ 1 Player
     const boards = [];
     for (let i = 0; i < room.cardsPerPlayer; i++) {
       const b = generateSingleBoard(room.config);
@@ -185,7 +202,6 @@ io.on('connection', (socket) => {
     }
 
     room.usedCardsCount += room.cardsPerPlayer;
-
     room.players[socket.id] = {
       id: socket.id,
       name,
@@ -199,10 +215,10 @@ io.on('connection', (socket) => {
       roomId,
       config: room.config,
       boards,
-      drawn: room.drawn
+      drawn: room.drawn,
+      status: room.status
     });
 
-    // แจ้งข้อมูลอัปเดตไปที่หน้าจอ Host
     io.to(room.host).emit('update-players-dashboard', {
       players: Object.values(room.players),
       usedCards: room.usedCardsCount,
@@ -211,25 +227,65 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Host กด Call ค่าถัดไป
-  socket.on('draw-item', (roomId) => {
+  // Host กด Start Game (นับถอยหลัง 3-2-1)
+  socket.on('start-game', (roomId) => {
     const room = rooms[roomId];
-    if (!room || room.host !== socket.id || room.available.length === 0) return;
+    if (!room || room.host !== socket.id || room.status !== 'waiting') return;
+
+    room.status = 'countdown';
+    let count = 3;
+    io.to(roomId).emit('game-countdown', count);
+
+    room.countdownTimer = setInterval(() => {
+      count--;
+      if (count > 0) {
+        io.to(roomId).emit('game-countdown', count);
+      } else {
+        clearInterval(room.countdownTimer);
+        room.countdownTimer = null;
+        room.status = 'in-progress';
+        io.to(roomId).emit('game-started');
+      }
+    }, 1000);
+  });
+
+  // Host กดยกเลิกการนับถอยหลัง Cancel
+  socket.on('cancel-countdown', (roomId) => {
+    const room = rooms[roomId];
+    if (!room || room.host !== socket.id || room.status !== 'countdown') return;
+
+    if (room.countdownTimer) {
+      clearInterval(room.countdownTimer);
+      room.countdownTimer = null;
+    }
+    room.status = 'waiting';
+    io.to(roomId).emit('countdown-cancelled');
+  });
+
+  // ฟังก์ชันส่วนกลางสำหรับการ Draw
+  function performDraw(roomId) {
+    const room = rooms[roomId];
+    if (!room || room.available.length === 0) return null;
 
     const idx = Math.floor(Math.random() * room.available.length);
     const item = room.available.splice(idx, 1)[0];
     room.drawn.push(item);
 
-    io.to(roomId).emit('item-drawn', { item, history: room.drawn });
+    io.to(roomId).emit('item-drawn', {
+      item,
+      history: room.drawn,
+      previous: room.drawn.length > 1 ? room.drawn[room.drawn.length - 2] : null
+    });
 
-    // ประมวลผล Auto Mark และเช็กบิงโก
+    // ตรวจสอบ Auto-mark และเงื่อนไขบิงโก
+    let someoneWon = false;
     Object.values(room.players).forEach(p => {
       let anyBoardChanged = false;
       p.boards.forEach(board => {
         if (p.autoMark) {
           board.grid.forEach(row => {
             row.forEach(cell => {
-              if (cell && cell.val === item && !cell.marked) {
+              if (cell && cell.val === item.val && !cell.marked) {
                 cell.marked = true;
                 anyBoardChanged = true;
               }
@@ -239,7 +295,9 @@ io.on('connection', (socket) => {
         board.minToGo = calculateMinToGo(board);
         if (board.minToGo === 0 && !p.hasWon) {
           p.hasWon = true;
-          io.to(roomId).emit('game-over', { winner: p.name });
+          someoneWon = true;
+          if (!room.winners.includes(p.name)) room.winners.push(p.name);
+          io.to(roomId).emit('game-over', { winner: p.name, winnersList: room.winners });
         }
       });
 
@@ -254,9 +312,48 @@ io.on('connection', (socket) => {
       totalCardsLimit: room.totalCardsLimit,
       maxPlayers: room.maxPlayers
     });
+
+    return { item, someoneWon };
+  }
+
+  // Host กด Call สุ่มมือ
+  socket.on('draw-item', (roomId) => {
+    const room = rooms[roomId];
+    if (!room || room.host !== socket.id) return;
+    performDraw(roomId);
   });
 
-  // Player กดกากบาทที่ช่อง
+  // Host เริ่ม/หยุด Auto Draw
+  socket.on('start-auto-draw', ({ roomId, intervalSec, stopOnWin }) => {
+    const room = rooms[roomId];
+    if (!room || room.host !== socket.id) return;
+
+    if (room.autoDrawInterval) clearInterval(room.autoDrawInterval);
+
+    room.autoDrawInterval = setInterval(() => {
+      const res = performDraw(roomId);
+      if (!res || room.available.length === 0 || (stopOnWin && res.someoneWon)) {
+        clearInterval(room.autoDrawInterval);
+        room.autoDrawInterval = null;
+        io.to(room.host).emit('auto-draw-stopped');
+      }
+    }, (parseInt(intervalSec) || 5) * 1000);
+
+    socket.emit('auto-draw-started');
+  });
+
+  socket.on('stop-auto-draw', (roomId) => {
+    const room = rooms[roomId];
+    if (!room || room.host !== socket.id) return;
+
+    if (room.autoDrawInterval) {
+      clearInterval(room.autoDrawInterval);
+      room.autoDrawInterval = null;
+    }
+    socket.emit('auto-draw-stopped');
+  });
+
+  // Player กดกากบาทช่อง (ล็อกถาวร กดซ้ำไม่หลุด)
   socket.on('mark-cell', ({ roomId, boardIdx, r, c }) => {
     const room = rooms[roomId];
     if (!room || !room.players[socket.id]) return;
@@ -266,10 +363,11 @@ io.on('connection', (socket) => {
     if (!board) return;
 
     const cell = board.grid[r][c];
-    if (!cell || cell.isBlank) return;
+    if (!cell || cell.isBlank || cell.marked) return; // หาก marked อยู่แล้วจะไม่สามารถเอาออกได้
 
-    if (cell.isFree || room.drawn.includes(cell.val)) {
-      cell.marked = !cell.marked;
+    const isDrawn = room.drawn.some(d => d.val === cell.val);
+    if (cell.isFree || isDrawn) {
+      cell.marked = true;
       board.minToGo = calculateMinToGo(board);
 
       socket.emit('boards-updated', p.boards);
@@ -282,12 +380,13 @@ io.on('connection', (socket) => {
 
       if (board.minToGo === 0 && !p.hasWon) {
         p.hasWon = true;
-        io.to(roomId).emit('game-over', { winner: p.name });
+        if (!room.winners.includes(p.name)) room.winners.push(p.name);
+        io.to(roomId).emit('game-over', { winner: p.name, winnersList: room.winners });
       }
     }
   });
 
-  // Player เปิด/ปิด Auto Mark ในหน้า Settings
+  // สลับ Auto Mark ในหน้า Settings
   socket.on('toggle-auto', ({ roomId, enabled }) => {
     const room = rooms[roomId];
     if (room && room.players[socket.id]) {
@@ -299,7 +398,8 @@ io.on('connection', (socket) => {
         p.boards.forEach(board => {
           board.grid.forEach(row => {
             row.forEach(cell => {
-              if (cell && !cell.isBlank && !cell.marked && (cell.isFree || room.drawn.includes(cell.val))) {
+              const isDrawn = room.drawn.some(d => d.val === cell.val);
+              if (cell && !cell.isBlank && !cell.marked && (cell.isFree || isDrawn)) {
                 cell.marked = true;
                 changed = true;
               }
@@ -308,7 +408,8 @@ io.on('connection', (socket) => {
           board.minToGo = calculateMinToGo(board);
           if (board.minToGo === 0 && !p.hasWon) {
             p.hasWon = true;
-            io.to(roomId).emit('game-over', { winner: p.name });
+            if (!room.winners.includes(p.name)) room.winners.push(p.name);
+            io.to(roomId).emit('game-over', { winner: p.name, winnersList: room.winners });
           }
         });
 
@@ -342,4 +443,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
