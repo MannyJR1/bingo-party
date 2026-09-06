@@ -7,13 +7,13 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <style>
     .theme-classic { background-color: #ff2a55; border-color: #ff2a55; }
     .theme-blue { background-color: #2563eb; border-color: #2563eb; }
     .theme-emerald { background-color: #059669; border-color: #059669; }
     .theme-purple { background-color: #7c3aed; border-color: #7c3aed; }
 
-    /* อนิเมชันสีเหลืองกะพริบสำหรับช่องที่เลขตรงกับ Call */
     @keyframes smoothYellowPulse {
       0%, 100% {
         background-color: #fef08a;
@@ -29,11 +29,18 @@
       color: #713f12 !important;
       cursor: pointer !important;
     }
+
+    @keyframes neonGlow {
+      0%, 100% { box-shadow: 0 0 20px #eab308, 0 0 40px #f59e0b; }
+      50% { box-shadow: 0 0 35px #facc15, 0 0 70px #d97706; }
+    }
+    .winner-box-glow {
+      animation: neonGlow 1.5s infinite alternate ease-in-out;
+    }
   </style>
 </head>
-<body class="bg-[#121620] text-slate-100 min-h-screen flex items-center justify-center p-2 font-sans selection:bg-rose-500 selection:text-white">
+<body class="bg-[#0f172a] text-slate-100 min-h-screen flex items-center justify-center p-2 font-sans selection:bg-rose-500 selection:text-white">
 
-  <!-- ==================== Overlay นับถอยหลัง 3-2-1 ==================== -->
   <div id="countdown-overlay" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex flex-col items-center justify-center space-y-6">
     <p class="text-xl uppercase tracking-widest text-slate-400 font-bold">Game Starting In</p>
     <div id="countdown-number" class="text-9xl font-black text-amber-400 animate-bounce">3</div>
@@ -42,7 +49,22 @@
     </button>
   </div>
 
-  <!-- ==================== 1. Landing View ==================== -->
+  <div id="winner-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+    <div class="bg-slate-900 border-2 border-amber-400 p-8 rounded-3xl max-w-lg w-full text-center space-y-6 winner-box-glow transform transition-all scale-100">
+      <div class="text-6xl animate-bounce">👑</div>
+      <h2 class="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 tracking-wider">
+        BINGO WINNER!
+      </h2>
+      <div class="bg-slate-950/80 p-5 rounded-2xl border border-amber-400/40">
+        <p class="text-xs text-amber-300 uppercase font-bold tracking-widest mb-1">ยินดีด้วยกับผู้ชนะ</p>
+        <p id="winner-name-disp" class="text-3xl sm:text-4xl font-black text-white truncate">-</p>
+      </div>
+      <button onclick="closeWinnerModal()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-8 py-3 rounded-xl shadow-lg transition">
+        รับทราบ / ปิดหน้าต่าง
+      </button>
+    </div>
+  </div>
+
   <div id="landing-card" class="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center space-y-6">
     <h1 class="text-4xl font-black text-amber-400 tracking-wider">🎯 BINGO LIVE</h1>
     <p class="text-slate-400 text-sm">เลือกระบบที่ต้องการเข้าใช้งาน</p>
@@ -56,7 +78,6 @@
     </div>
   </div>
 
-  <!-- ==================== 2. Host Config & Live Preview ==================== -->
   <div id="host-config-card" class="hidden bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl max-w-4xl w-full">
     <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
       <h2 class="text-2xl font-black text-white">Bingo Card Generator</h2>
@@ -159,7 +180,38 @@
     </div>
   </div>
 
-  <!-- ==================== 3. Player QR Join ==================== -->
+  <div id="host-lobby-view" class="hidden bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl max-w-2xl w-full text-center space-y-6 my-4">
+    <div class="border-b border-slate-800 pb-4">
+      <span class="text-xs font-bold text-amber-400 uppercase tracking-widest">Bingo Waiting Room</span>
+      <h2 class="text-3xl font-black text-white mt-1">สแกนหรือใส่รหัสเพื่อเข้าร่วม</h2>
+    </div>
+
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-8 bg-slate-950 p-6 rounded-2xl border border-slate-800">
+      <div id="lobby-qrcode" class="p-3 bg-white rounded-2xl shadow-xl"></div>
+      <div class="text-center sm:text-left">
+        <p class="text-xs text-slate-400 uppercase font-bold tracking-wider">ROOM CODE</p>
+        <p id="lobby-room-code" class="text-6xl font-black text-amber-400 tracking-widest my-1">----</p>
+        <p id="lobby-capacity-tag" class="text-sm font-bold text-emerald-400 mt-2">
+          ผู้เล่นในห้อง: 0 / 0 คน
+        </p>
+      </div>
+    </div>
+
+    <div class="text-left bg-slate-950 p-4 rounded-2xl border border-slate-800">
+      <div class="flex justify-between items-center mb-2">
+        <span class="text-xs text-slate-400 font-bold uppercase">Players Joined:</span>
+        <span id="lobby-player-count-badge" class="text-xs bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded-full font-bold">0 คน</span>
+      </div>
+      <div id="lobby-players-list" class="flex flex-wrap gap-2 max-h-36 overflow-y-auto">
+        <span class="text-xs text-slate-500 italic">กำลังรอผู้เล่นเข้าร่วม...</span>
+      </div>
+    </div>
+
+    <button onclick="startCountdownGame()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 rounded-2xl font-black text-xl transition shadow-xl shadow-emerald-950/40 active:scale-98">
+      ▶ Start Game (เริ่มนับถอยหลัง 3-2-1)
+    </button>
+  </div>
+
   <div id="qr-join-card" class="hidden bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center space-y-5">
     <h1 class="text-3xl font-black text-amber-400 tracking-wider">🎯 เข้าร่วมห้อง</h1>
     <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
@@ -172,7 +224,6 @@
     </button>
   </div>
 
-  <!-- ==================== 4. Player Manual Join ==================== -->
   <div id="manual-join-card" class="hidden bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center space-y-4">
     <h1 class="text-3xl font-black text-indigo-400 tracking-wider">เข้าเล่นด้วยรหัส</h1>
     <input id="manual-code-input" type="text" placeholder="รหัสห้อง 4 ตัว" class="w-full p-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-center font-mono font-black text-xl uppercase tracking-widest outline-none">
@@ -183,107 +234,94 @@
     <button onclick="goToLanding()" class="text-xs text-slate-400 hover:text-white pt-2 block w-full">← กลับหน้าแรก</button>
   </div>
 
-  <!-- ==================== 5. Host View Full-suite ==================== -->
   <div id="host-view" class="hidden w-full max-w-7xl space-y-4 my-4">
-    <!-- แถบด้านบนสุด: CURRENT DRAW และ PREVIOUS DRAW -->
-    <div class="grid grid-cols-2 bg-[#0052cc] text-white rounded-t-xl overflow-hidden shadow-xl text-center divide-x-2 divide-blue-400/40">
-      <div class="py-4 px-2 flex flex-col items-center justify-center">
-        <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-white text-slate-950 flex flex-col items-center justify-center shadow-2xl my-2">
-          <span id="host-curr-letter" class="text-xs font-black text-blue-600 leading-none">BINGO</span>
-          <span id="host-curr-val" class="text-3xl sm:text-4xl font-black text-slate-950 leading-tight truncate max-w-[90%]">-</span>
+    <div class="grid grid-cols-2 bg-[#1e293b] border border-slate-800 text-white rounded-t-2xl overflow-hidden shadow-2xl text-center divide-x divide-slate-800">
+      <div class="py-5 px-2 flex flex-col items-center justify-center">
+        <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-slate-950 border-2 border-amber-400 text-white flex flex-col items-center justify-center shadow-xl my-2">
+          <span id="host-curr-letter" class="text-xs font-black text-amber-400 leading-none">BINGO</span>
+          <span id="host-curr-val" class="text-3xl sm:text-4xl font-black text-white leading-tight truncate max-w-[90%]">-</span>
         </div>
-        <p class="font-black tracking-widest text-xs sm:text-sm uppercase bg-black/25 w-full py-1.5 mt-2">CURRENT DRAW</p>
+        <p class="font-black tracking-widest text-xs sm:text-sm uppercase bg-slate-950/60 w-full py-1.5 mt-2 text-slate-400">CURRENT DRAW</p>
       </div>
 
-      <div class="py-4 px-2 flex flex-col items-center justify-center">
-        <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-white text-slate-950 flex flex-col items-center justify-center shadow-2xl my-2 opacity-90">
-          <span id="host-prev-letter" class="text-xs font-black text-slate-400 leading-none">PREV</span>
-          <span id="host-prev-val" class="text-3xl sm:text-4xl font-black text-slate-800 leading-tight truncate max-w-[90%]">-</span>
+      <div class="py-5 px-2 flex flex-col items-center justify-center">
+        <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-slate-950 border border-slate-700 text-slate-400 flex flex-col items-center justify-center shadow-xl my-2">
+          <span id="host-prev-letter" class="text-xs font-black text-slate-500 leading-none">PREV</span>
+          <span id="host-prev-val" class="text-3xl sm:text-4xl font-black text-slate-300 leading-tight truncate max-w-[90%]">-</span>
         </div>
-        <p class="font-black tracking-widest text-xs sm:text-sm uppercase bg-black/25 w-full py-1.5 mt-2">PREVIOUS DRAW</p>
+        <p class="font-black tracking-widest text-xs sm:text-sm uppercase bg-slate-950/60 w-full py-1.5 mt-2 text-slate-500">PREVIOUS DRAW</p>
       </div>
     </div>
 
-    <!-- แผงควบคุมระบบ Auto Draw และปุ่ม Action ต่างๆ -->
-    <div class="bg-white text-slate-800 p-4 rounded-b-xl shadow-lg flex flex-wrap items-center justify-between gap-4 border-t border-slate-200">
-      <!-- ตัวตั้งค่า Automatic Draw -->
-      <div class="flex flex-col gap-2 text-xs">
-        <span class="font-black text-[#0052cc] tracking-wide uppercase">AUTOMATIC DRAW</span>
+    <div class="bg-[#1e293b] border border-slate-800 text-slate-200 p-5 rounded-b-2xl shadow-xl flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-col gap-2.5 text-xs">
+        <span class="font-black text-amber-400 tracking-wide uppercase">AUTOMATIC DRAW</span>
         <div class="flex items-center gap-2">
           <span>Time between draws:</span>
-          <select id="auto-draw-time" class="border border-slate-300 rounded px-2 py-1 font-bold">
+          <select id="auto-draw-time" onchange="onAutoTimeChange(this.value)" class="bg-slate-950 border border-slate-700 rounded px-2.5 py-1 font-bold text-white outline-none">
             <option value="3">3s</option>
             <option value="5">5s</option>
             <option value="7" selected>7s</option>
             <option value="10">10s</option>
           </select>
-          <button id="btn-start-auto" onclick="toggleAutoDraw(true)" class="bg-[#0052cc] text-white px-3 py-1 rounded font-bold hover:bg-blue-700 transition">Start</button>
-          <button id="btn-stop-auto" onclick="toggleAutoDraw(false)" class="bg-slate-200 text-slate-700 px-3 py-1 rounded font-bold hover:bg-slate-300 transition">Stop</button>
+          <button id="btn-start-auto" onclick="toggleAutoDraw(true)" class="bg-indigo-600 text-white px-3.5 py-1 rounded-lg font-bold hover:bg-indigo-500 transition shadow">Start</button>
+          <button id="btn-stop-auto" onclick="toggleAutoDraw(false)" class="bg-slate-800 text-slate-400 px-3.5 py-1 rounded-lg font-bold hover:bg-slate-700 transition">Stop</button>
         </div>
         <div class="flex items-center gap-2">
           <span>Stop when card is winning:</span>
           <div class="inline-flex rounded-md shadow-sm">
-            <button id="btn-stop-win-yes" onclick="setStopOnWin(true)" class="bg-[#0052cc] text-white px-2.5 py-0.5 text-xs font-bold rounded-l">Yes</button>
-            <button id="btn-stop-win-no" onclick="setStopOnWin(false)" class="bg-slate-200 text-slate-600 px-2.5 py-0.5 text-xs font-bold rounded-r">No</button>
+            <button id="btn-stop-win-yes" onclick="setStopOnWin(true)" class="bg-indigo-600 text-white px-2.5 py-0.5 text-xs font-bold rounded-l">Yes</button>
+            <button id="btn-stop-win-no" onclick="setStopOnWin(false)" class="bg-slate-800 text-slate-400 px-2.5 py-0.5 text-xs font-bold rounded-r">No</button>
           </div>
         </div>
       </div>
 
-      <!-- ปุ่ม Make a draw และปุ่มเริ่มเกม Start -->
       <div class="flex items-center gap-3">
-        <button id="btn-host-start-game" onclick="startCountdownGame()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-4 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg transition">
-          ▶ Start Game (3-2-1)
+        <button onclick="drawNextManual()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3.5 rounded-2xl font-black text-sm flex flex-col items-center justify-center gap-1 shadow-xl transition active:scale-95">
+          <span class="w-8 h-8 rounded-full bg-indigo-950 border-2 border-amber-400 flex items-center justify-center text-amber-400 text-lg leading-none">🎲</span>
+          <span>Make a draw</span>
         </button>
 
-        <button onclick="drawNextManual()" class="bg-[#001f5c] hover:bg-[#002f8c] text-white px-8 py-3 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 shadow-xl transition active:scale-95">
-          <span class="w-8 h-8 rounded-full border-2 border-emerald-400 flex items-center justify-center text-emerald-400 text-lg leading-none">▶</span>
-          <span>Make a draw</span>
+        <button onclick="restartGame()" class="bg-rose-700 hover:bg-rose-600 text-white px-5 py-3.5 rounded-2xl font-black text-xs flex flex-col items-center justify-center gap-1 shadow-lg transition active:scale-95">
+          <span class="text-base">🔄</span>
+          <span>Restart Game</span>
         </button>
       </div>
 
-      <!-- รายชื่อผู้ชนะ & ลิงก์ห้อง -->
       <div class="flex flex-col gap-2 min-w-[200px]">
-        <button onclick="alert('ผู้ชนะทั้งหมด: ' + (winnersList.join(', ') || 'ยังไม่มี'))" class="bg-[#0052cc] text-white py-1.5 px-4 rounded font-bold text-xs hover:bg-blue-700 transition">
-          Winners list (<span id="host-winners-count">0</span>)
+        <button onclick="showWinnersModal()" class="bg-amber-500/20 border border-amber-500/40 text-amber-300 py-1.5 px-4 rounded-xl font-bold text-xs hover:bg-amber-500/30 transition">
+          🏆 Winners list (<span id="host-winners-count">0</span>)
         </button>
-        <button onclick="toggleMonitorView()" id="btn-toggle-monitor" class="bg-slate-800 text-white py-1.5 px-4 rounded font-bold text-xs hover:bg-slate-700 transition">
+        <button onclick="toggleMonitorView()" id="btn-toggle-monitor" class="bg-slate-800 border border-slate-700 text-white py-1.5 px-4 rounded-xl font-bold text-xs hover:bg-slate-700 transition">
           👁️ Show Live Monitor
         </button>
-        <div class="text-[11px] text-slate-500 flex items-center justify-between pt-1">
+        <div class="text-[11px] text-slate-400 flex items-center justify-between pt-1">
           <span id="host-status-players">👥 0 / 0</span>
-          <span class="font-mono font-bold text-[#0052cc]" id="host-disp-code">ROOM: ----</span>
+          <span class="font-mono font-bold text-amber-400" id="host-disp-code">ROOM: ----</span>
         </div>
       </div>
     </div>
 
-    <!-- Master Board: ตาราง B-I-N-G-O แม่บท แสดงสถานะคำทั้งหมด -->
-    <div class="bg-white text-slate-900 rounded-xl p-4 shadow-lg">
-      <div class="grid grid-cols-5 bg-[#0052cc] text-white font-black text-2xl py-2 rounded-t-lg text-center tracking-widest">
+    <div class="bg-[#1e293b] border border-slate-800 text-white rounded-2xl p-4 shadow-xl">
+      <div class="grid grid-cols-5 bg-slate-950 text-amber-400 font-black text-2xl py-2.5 rounded-t-xl text-center tracking-widest border-b border-slate-800">
         <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
       </div>
-      <div id="master-board-columns" class="grid grid-cols-5 divide-x divide-slate-200 border border-slate-200 text-xs font-semibold p-2 bg-slate-50 min-h-[220px]">
-        <!-- รายการคำจะถูกใส่ที่นี่ -->
-      </div>
+      <div id="master-board-columns" class="grid grid-cols-5 divide-x divide-slate-800 border border-slate-800 text-xs font-semibold p-2 bg-slate-900 rounded-b-xl min-h-[220px]"></div>
     </div>
 
-    <!-- Host Live Monitor (ดูจอ Player ทุกคน) โดย Default จะซ่อนอยู่ -->
-    <div id="host-monitor-section" class="hidden bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
+    <div id="host-monitor-section" class="hidden bg-[#1e293b] border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
       <div class="flex justify-between items-center">
         <div>
           <h3 class="text-xl font-black text-white">กระดานของ Player ทุกคน (Host Live Monitor)</h3>
           <p class="text-xs text-slate-400">แสดงกระดานจริงพร้อมตัวเลขทุกช่อง และไฮไลต์เขียวเพื่อตรวจเช็กความถูกต้อง</p>
         </div>
-        <div id="host-qrcode-box" class="p-1.5 bg-white rounded-lg"></div>
       </div>
       <div id="players-grid-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
     </div>
   </div>
 
-  <!-- ==================== 6. Player View โฉมใหม่ ==================== -->
   <div id="player-view" class="hidden w-full max-w-md space-y-3 my-2">
-    <!-- แถบประวัติด้านบนสุดตามภาพ (Draw History Strip) -->
     <div class="bg-[#2d2f34] text-white rounded-t-xl overflow-hidden flex items-center justify-between shadow-xl">
-      <!-- กล่องสีน้ำเงิน Current Draw ตัวล่าสุด -->
       <div class="bg-[#0052cc] px-4 py-3 flex items-center gap-3 min-w-[150px]">
         <div id="player-head-circle" class="w-10 h-10 rounded-full bg-white text-slate-950 font-black text-xl flex items-center justify-center shadow-md">
           -
@@ -294,12 +332,8 @@
         </div>
       </div>
 
-      <!-- แถบประวัติย้อนหลังเรียงตัวกลม -->
-      <div id="player-history-strip" class="flex items-center gap-2 px-3 overflow-x-auto text-xs py-2">
-        <!-- ตัวอย่างประวัติย้อนหลัง -->
-      </div>
+      <div id="player-history-strip" class="flex items-center gap-2 px-3 overflow-x-auto text-xs py-2"></div>
 
-      <!-- ปุ่ม 3 จุด (...) สำหรับเมนู Settings -->
       <button onclick="openSettingsModal()" class="px-4 py-3 text-slate-400 hover:text-white transition" title="ตั้งค่า">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
           <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
@@ -307,11 +341,9 @@
       </button>
     </div>
 
-    <!-- พื้นที่ใส่กระดานบิงโกของ Player สไตล์ Minimal Clean Card -->
     <div id="player-cards-stack" class="space-y-4"></div>
   </div>
 
-  <!-- ==================== Popup Modal Setting ==================== -->
   <div id="settings-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-xs w-full space-y-5 shadow-2xl">
       <div class="flex justify-between items-center border-b border-slate-800 pb-3">
@@ -346,6 +378,8 @@
     let stopOnWinning = true;
     let winnersList = [];
     let isMonitorVisible = false;
+    let isAutoDrawActive = false;
+    let masterColumnsData = null;
 
     window.onload = () => {
       const roomParam = new URLSearchParams(window.location.search).get('room');
@@ -361,11 +395,12 @@
     };
 
     function showView(viewId) {
-      ['landing-card', 'host-config-card', 'qr-join-card', 'manual-join-card', 'host-view', 'player-view'].forEach(id => {
+      ['landing-card', 'host-config-card', 'host-lobby-view', 'qr-join-card', 'manual-join-card', 'host-view', 'player-view'].forEach(id => {
         document.getElementById(id).classList.add('hidden');
       });
       if (viewId === 'landing') document.getElementById('landing-card').classList.remove('hidden');
       if (viewId === 'host-config') document.getElementById('host-config-card').classList.remove('hidden');
+      if (viewId === 'host-lobby') document.getElementById('host-lobby-view').classList.remove('hidden');
       if (viewId === 'qr-join') document.getElementById('qr-join-card').classList.remove('hidden');
       if (viewId === 'manual-join') document.getElementById('manual-join-card').classList.remove('hidden');
       if (viewId === 'host') document.getElementById('host-view').classList.remove('hidden');
@@ -497,24 +532,52 @@
       socket.emit('create-room', config);
     }
 
+    // เมื่อสร้างห้องเสร็จ จะพามาที่หน้า Waiting Room (Lobby) เป็นอันดับแรก
     socket.on('room-created', ({ roomId, config, maxPlayers, totalCardsLimit, masterColumns }) => {
       currentRoom = roomId;
-      showView('host');
+      masterColumnsData = masterColumns;
+
+      showView('host-lobby');
+      document.getElementById('lobby-room-code').innerText = roomId;
+      document.getElementById('lobby-capacity-tag').innerText = `ผู้เล่นในห้อง: 0 / ${maxPlayers} คน (การ์ด: 0 / ${totalCardsLimit})`;
+
+      const qrContainer = document.getElementById('lobby-qrcode');
+      qrContainer.innerHTML = '';
+      new QRCode(qrContainer, {
+        text: `${window.location.origin}?room=${roomId}`,
+        width: 170,
+        height: 170
+      });
+
+      // จัดเตรียมข้อมูลหน้า Draw Panel รอไว้
       document.getElementById('host-disp-code').innerText = `ROOM: ${roomId}`;
       document.getElementById('host-status-players').innerText = `👥 0 / ${maxPlayers} (Cards: 0 / ${totalCardsLimit})`;
-
-      // Render Master Board Columns
       renderMasterBoard(masterColumns);
+    });
 
-      new QRCode(document.getElementById('host-qrcode-box'), {
-        text: `${window.location.origin}?room=${roomId}`,
-        width: 100,
-        height: 100
-      });
+    // อัปเดตรายชื่อผู้เล่นใน Waiting Room แบบสดๆ
+    socket.on('update-lobby-players', (playerNames) => {
+      const listDiv = document.getElementById('lobby-players-list');
+      const badge = document.getElementById('lobby-player-count-badge');
+      if (!listDiv) return;
+
+      badge.innerText = `${playerNames.length} คน`;
+      if (playerNames.length === 0) {
+        listDiv.innerHTML = '<span class="text-xs text-slate-500 italic">กำลังรอผู้เล่นเข้าร่วม...</span>';
+        return;
+      }
+
+      listDiv.innerHTML = playerNames.map(name => `
+        <span class="bg-indigo-950 border border-indigo-800 text-indigo-200 px-3 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          ${name}
+        </span>
+      `).join('');
     });
 
     function renderMasterBoard(colsData) {
       const container = document.getElementById('master-board-columns');
+      if (!container || !colsData) return;
       container.innerHTML = '';
       const letters = ['B', 'I', 'N', 'G', 'O'];
 
@@ -526,7 +589,7 @@
         items.forEach(item => {
           const itemTag = document.createElement('div');
           itemTag.id = `mb-item-${item.val}`;
-          itemTag.className = 'px-1.5 py-0.5 rounded text-slate-700 bg-white border border-slate-200 transition truncate text-center';
+          itemTag.className = 'px-1.5 py-0.5 rounded text-slate-300 bg-slate-800/80 border border-slate-700/60 transition truncate text-center';
           itemTag.innerText = item.val;
           colDiv.appendChild(itemTag);
         });
@@ -552,8 +615,8 @@
       overlay.classList.remove('hidden');
       num.innerText = count;
 
-      // ถ้าเป็น Host จะเห็นปุ่ม Cancel
-      if (!document.getElementById('host-view').classList.contains('hidden')) {
+      // ตรวจสอบว่าเป็น Host หรือไม่ เพื่อให้สิทธิ์กด Cancel
+      if (!document.getElementById('host-lobby-view').classList.contains('hidden') || !document.getElementById('host-view').classList.contains('hidden')) {
         cancelBtn.classList.remove('hidden');
       } else {
         cancelBtn.classList.add('hidden');
@@ -566,12 +629,9 @@
 
     socket.on('game-started', () => {
       document.getElementById('countdown-overlay').classList.add('hidden');
-      const startBtn = document.getElementById('btn-host-start-game');
-      if (startBtn) {
-        startBtn.innerText = '✓ Game In Progress (Locked)';
-        startBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');
-        startBtn.classList.add('bg-slate-400', 'cursor-not-allowed');
-        startBtn.disabled = true;
+      // Host จะเปลี่ยนจากหน้า Lobby เข้าสู่หน้า Draw Panel ทันที
+      if (!document.getElementById('host-lobby-view').classList.contains('hidden')) {
+        showView('host');
       }
     });
 
@@ -623,6 +683,7 @@
       socket.emit('draw-item', currentRoom);
     }
 
+    // Auto Draw และการเปลี่ยนเวลาแบบเรียลไทม์
     function toggleAutoDraw(start) {
       if (start) {
         const sec = document.getElementById('auto-draw-time').value;
@@ -632,26 +693,62 @@
       }
     }
 
+    function onAutoTimeChange(newSec) {
+      if (isAutoDrawActive) {
+        socket.emit('change-auto-interval', { roomId: currentRoom, intervalSec: newSec });
+      }
+    }
+
     function setStopOnWin(val) {
       stopOnWinning = val;
-      document.getElementById('btn-stop-win-yes').className = val ? 'bg-[#0052cc] text-white px-2.5 py-0.5 text-xs font-bold rounded-l' : 'bg-slate-200 text-slate-600 px-2.5 py-0.5 text-xs font-bold rounded-l';
-      document.getElementById('btn-stop-win-no').className = !val ? 'bg-[#0052cc] text-white px-2.5 py-0.5 text-xs font-bold rounded-r' : 'bg-slate-200 text-slate-600 px-2.5 py-0.5 text-xs font-bold rounded-r';
+      document.getElementById('btn-stop-win-yes').className = val ? 'bg-indigo-600 text-white px-2.5 py-0.5 text-xs font-bold rounded-l' : 'bg-slate-800 text-slate-400 px-2.5 py-0.5 text-xs font-bold rounded-l';
+      document.getElementById('btn-stop-win-no').className = !val ? 'bg-indigo-600 text-white px-2.5 py-0.5 text-xs font-bold rounded-r' : 'bg-slate-800 text-slate-400 px-2.5 py-0.5 text-xs font-bold rounded-r';
     }
 
     socket.on('auto-draw-started', () => {
-      document.getElementById('btn-start-auto').className = 'bg-emerald-600 text-white px-3 py-1 rounded font-bold';
-      document.getElementById('btn-stop-auto').className = 'bg-slate-200 text-slate-700 px-3 py-1 rounded font-bold';
+      isAutoDrawActive = true;
+      document.getElementById('btn-start-auto').className = 'bg-emerald-600 text-white px-3.5 py-1 rounded-lg font-bold shadow';
+      document.getElementById('btn-stop-auto').className = 'bg-slate-800 text-slate-400 px-3.5 py-1 rounded-lg font-bold';
     });
 
     socket.on('auto-draw-stopped', () => {
-      document.getElementById('btn-start-auto').className = 'bg-[#0052cc] text-white px-3 py-1 rounded font-bold';
-      document.getElementById('btn-stop-auto').className = 'bg-rose-600 text-white px-3 py-1 rounded font-bold';
+      isAutoDrawActive = false;
+      document.getElementById('btn-start-auto').className = 'bg-indigo-600 text-white px-3.5 py-1 rounded-lg font-bold shadow';
+      document.getElementById('btn-stop-auto').className = 'bg-rose-600 text-white px-3.5 py-1 rounded-lg font-bold shadow';
+    });
+
+    // ปุ่ม Restart Game
+    function restartGame() {
+      if (confirm('คุณต้องการรีเซ็ตประวัติและเริ่มรอบใหม่ให้ทุกคนใช่หรือไม่?')) {
+        socket.emit('restart-game', currentRoom);
+      }
+    }
+
+    socket.on('game-restarted', () => {
+      currentDrawn = [];
+      winnersList = [];
+      document.getElementById('host-winners-count').innerText = '0';
+      document.getElementById('host-curr-letter').innerText = 'BINGO';
+      document.getElementById('host-curr-val').innerText = '-';
+      document.getElementById('host-prev-letter').innerText = 'PREV';
+      document.getElementById('host-prev-val').innerText = '-';
+
+      const pHeadVal = document.getElementById('player-head-val');
+      if (pHeadVal) pHeadVal.innerText = '-';
+      const pHeadCirc = document.getElementById('player-head-circle');
+      if (pHeadCirc) pHeadCirc.innerText = '-';
+      const pStrip = document.getElementById('player-history-strip');
+      if (pStrip) pStrip.innerHTML = '';
+
+      if (masterColumnsData) renderMasterBoard(masterColumnsData);
+      closeWinnerModal();
+      alert('รอบใหม่เริ่มต้นแล้ว! การ์ดถูกสุ่มใหม่เรียบร้อย');
     });
 
     socket.on('item-drawn', ({ item, history, previous }) => {
       currentDrawn = history;
 
-      // อัปเดตฝั่ง Host
+      // อัปเดต Host
       document.getElementById('host-curr-letter').innerText = item.letter || 'DRAW';
       document.getElementById('host-curr-val').innerText = item.val;
 
@@ -660,29 +757,32 @@
         document.getElementById('host-prev-val').innerText = previous.val;
       }
 
-      // ไฮไลต์คำใน Master Board
+      // ไฮไลต์คำใน Master Board โทน Dark
       const mbItem = document.getElementById(`mb-item-${item.val}`);
       if (mbItem) {
-        mbItem.className = 'px-1.5 py-0.5 rounded text-white bg-[#0052cc] font-bold line-through text-center shadow-sm';
+        mbItem.className = 'px-1.5 py-0.5 rounded text-white bg-indigo-600 font-bold line-through text-center shadow-md';
       }
 
-      // อัปเดตฝั่ง Player
-      document.getElementById('player-head-circle').innerText = item.letter || '•';
-      document.getElementById('player-head-val').innerText = item.val;
+      // อัปเดต Player
+      const pHeadCirc = document.getElementById('player-head-circle');
+      if (pHeadCirc) pHeadCirc.innerText = item.letter || '•';
+      const pHeadVal = document.getElementById('player-head-val');
+      if (pHeadVal) pHeadVal.innerText = item.val;
 
-      // แถบประวัติย้อนหลังของ Player
       const strip = document.getElementById('player-history-strip');
-      strip.innerHTML = '';
-      const recent = [...history].reverse().slice(1, 5); // 4 ตัวก่อนหน้า
-      recent.forEach(h => {
-        const itemTag = document.createElement('div');
-        itemTag.className = 'flex items-center gap-1.5 bg-slate-800 border border-slate-700 px-2 py-1 rounded-full text-slate-200 shrink-0';
-        itemTag.innerHTML = `
-          <span class="w-5 h-5 rounded-full bg-white text-slate-900 font-black text-[10px] flex items-center justify-center">${h.letter || '•'}</span>
-          <span class="font-bold text-xs truncate max-w-[60px]">${h.val}</span>
-        `;
-        strip.appendChild(itemTag);
-      });
+      if (strip) {
+        strip.innerHTML = '';
+        const recent = [...history].reverse().slice(1, 5);
+        recent.forEach(h => {
+          const itemTag = document.createElement('div');
+          itemTag.className = 'flex items-center gap-1.5 bg-slate-800 border border-slate-700 px-2 py-1 rounded-full text-slate-200 shrink-0';
+          itemTag.innerHTML = `
+            <span class="w-5 h-5 rounded-full bg-white text-slate-900 font-black text-[10px] flex items-center justify-center">${h.letter || '•'}</span>
+            <span class="font-bold text-xs truncate max-w-[60px]">${h.val}</span>
+          `;
+          strip.appendChild(itemTag);
+        });
+      }
 
       renderPlayerCards();
     });
@@ -692,7 +792,7 @@
       renderPlayerCards();
     });
 
-    // แสดงกระดาน Player สไตล์ Minimal Clean Card ตามภาพ
+    // Render การ์ด Player สไตล์ Minimal Clean Card ขอบดำตามภาพ
     function renderPlayerCards() {
       const stack = document.getElementById('player-cards-stack');
       if (!stack) return;
@@ -702,10 +802,9 @@
         const cardBox = document.createElement('div');
         cardBox.className = 'bg-white rounded-xl shadow-2xl border-4 border-black overflow-hidden';
 
-        // หัวคอลัมน์ B I N G O ตัวหนาสีเทาเข้ม
         const headerGrid = document.createElement('div');
         headerGrid.className = `grid grid-cols-${board.cols} text-center font-black text-3xl sm:text-4xl text-[#333333] border-b-4 border-black py-2 bg-white`;
-        
+
         const defaultLetters = ['B', 'I', 'N', 'G', 'O'];
         for (let i = 0; i < board.cols; i++) {
           const div = document.createElement('div');
@@ -714,7 +813,6 @@
         }
         cardBox.appendChild(headerGrid);
 
-        // ตารางช่องบิงโกพื้นขาว เส้นขอบดำ 2px
         const gridDiv = document.createElement('div');
         gridDiv.className = `grid grid-cols-${board.cols} divide-x-2 divide-y-2 divide-black border-collapse text-black font-black`;
 
@@ -735,14 +833,13 @@
             if (cell.marked) {
               cls += 'bg-emerald-500 text-white cursor-default ';
             } else if (isMatchUnmarked) {
-              cls += 'match-pulse-glow '; // สีเหลืองกะพริบ
+              cls += 'match-pulse-glow ';
             } else {
               cls += 'bg-white text-slate-700 cursor-not-allowed ';
             }
 
             btn.className = cls;
 
-            // ตกแต่งช่อง Free เป็นรูปดาวตามรูป
             if (cell.isFree) {
               btn.innerHTML = `
                 <div class="flex flex-col items-center justify-center text-slate-400">
@@ -756,7 +853,6 @@
               btn.innerText = cell.val;
             }
 
-            // ถ้าเลขออกแล้วและยังไม่เคยกด สามารถกดเลือกได้ (และจะล็อกถาวรทันที)
             if ((isDrawn || cell.isFree) && !cell.marked) {
               btn.onclick = () => socket.emit('mark-cell', { roomId: currentRoom, boardIdx: bIdx, r, c });
             }
@@ -770,9 +866,12 @@
       });
     }
 
-    // Host Dashboard: แสดงกระดานจำลองของจริงพร้อมตัวเลข
+    // Host Dashboard
     socket.on('update-players-dashboard', ({ players, usedCards, totalCardsLimit, maxPlayers }) => {
-      document.getElementById('host-status-players').innerText = `👥 ${players.length} / ${maxPlayers} (Cards: ${usedCards} / ${totalCardsLimit})`;
+      const pCountTag = document.getElementById('host-status-players');
+      if (pCountTag) {
+        pCountTag.innerText = `👥 ${players.length} / ${maxPlayers} (Cards: ${usedCards} / ${totalCardsLimit})`;
+      }
 
       const container = document.getElementById('players-grid-container');
       if (!container) return;
@@ -785,14 +884,14 @@
           const isBingo = board.minToGo === 0;
 
           let borderCls = 'border-slate-800';
-          if (isBingo) borderCls = 'border-emerald-500 ring-2 ring-emerald-500';
-          else if (isNear) borderCls = 'border-amber-400 ring-2 ring-amber-400';
+          if (isBingo) borderCls = 'border-amber-400 ring-2 ring-amber-400';
+          else if (isNear) borderCls = 'border-yellow-500 ring-1 ring-yellow-500';
 
           card.className = `bg-slate-950 p-3 rounded-xl border ${borderCls} flex flex-col justify-between`;
 
           let badge = `<span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-bold">ขาด ${board.minToGo}</span>`;
-          if (isBingo) badge = `<span class="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-black animate-bounce">🎉 BINGO!</span>`;
-          else if (isNear) badge = `<span class="text-[10px] bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full font-black animate-pulse">🔥 ขาดอีก ${board.minToGo}</span>`;
+          if (isBingo) badge = `<span class="text-[10px] bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full font-black animate-bounce">🎉 BINGO!</span>`;
+          else if (isNear) badge = `<span class="text-[10px] bg-yellow-400 text-slate-950 px-2 py-0.5 rounded-full font-black animate-pulse">🔥 ขาดอีก ${board.minToGo}</span>`;
 
           const cardLabel = p.boards.length > 1 ? ` (${bIdx + 1})` : '';
           card.innerHTML = `
@@ -827,11 +926,31 @@
       });
     });
 
+    // แสดง Pop-up ผู้ชนะกลางจอพร้อมเอฟเฟกต์พลุ Confetti
     socket.on('game-over', ({ winner, winnersList: wList }) => {
       winnersList = wList || [];
       document.getElementById('host-winners-count').innerText = winnersList.length;
-      alert(`🎉 BINGO! ผู้ชนะคือ: ${winner}`);
+      document.getElementById('winner-name-disp').innerText = winner;
+
+      document.getElementById('winner-modal').classList.remove('hidden');
+
+      // ยิงพลุกระดาษเฉลิมฉลอง
+      if (typeof confetti === 'function') {
+        confetti({
+          particleCount: 120,
+          spread: 80,
+          origin: { y: 0.6 }
+        });
+      }
     });
+
+    function closeWinnerModal() {
+      document.getElementById('winner-modal').classList.add('hidden');
+    }
+
+    function showWinnersModal() {
+      alert('รายชื่อผู้ชนะทั้งหมด:\n' + (winnersList.join('\n') || 'ยังไม่มีผู้ชนะในรอบนี้'));
+    }
 
     socket.on('error-msg', (msg) => alert(msg));
   </script>
