@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-time Bingo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body class="bg-slate-950 text-white min-h-screen flex items-center justify-center p-4 font-sans">
+
+  <div id="lobby" class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-lg space-y-6">
+    <h1 class="text-3xl font-black text-center text-amber-400 tracking-wider">🎯 BINGO REALTIME</h1>
+
+    <div class="bg-slate-800/60 p-4 rounded-xl space-y-3 border border-slate-700">
+      <h2 class="font-bold text-emerald-400">สำหรับผู้สร้างห้อง (Host)</h2>
+      <label class="block text-xs text-slate-400 leading-relaxed">
+        ใส่ชุดคำคั่นด้วยจุลภาค (,) หรือเว้นว่างไว้เพื่อใช้เลข 1-75 (ต้องมี 24 คำขึ้นไป):
+      </label>
+      <textarea id="customItemsInput" rows="3" placeholder="เว้นว่างไว้ = ใช้เลข 1-75 อัตโนมัติ" class="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-xs focus:ring-1 focus:ring-emerald-400 outline-none"></textarea>
+      <button onclick="createHost()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-bold transition text-sm">
+        สร้างห้องใหม่
+      </button>
+    </div>
+
+    <div class="bg-slate-800/60 p-4 rounded-xl space-y-3 border border-slate-700">
+      <h2 class="font-bold text-indigo-400">สำหรับผู้เล่น (Player)</h2>
+      <input id="playerName" type="text" placeholder="ใส่ชื่อของคุณ" class="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-sm text-center outline-none">
+      <input id="joinRoomId" type="text" placeholder="รหัสห้อง 4 ตัว" class="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-sm text-center uppercase tracking-widest outline-none">
+      <button onclick="joinGame()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-2.5 rounded-lg font-bold transition text-sm">
+        เข้าร่วมห้อง
+      </button>
+    </div>
+  </div>
+
+  <div id="host-view" class="hidden bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-4xl space-y-6">
+    <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+      <div>
+        <p class="text-xs text-slate-400 uppercase tracking-wider">Room Code</p>
+        <p id="host-room-code" class="text-5xl font-black text-amber-400 tracking-widest"></p>
+      </div>
+      <div id="qrcode" class="p-2 bg-white rounded-xl shadow"></div>
+    </div>
+
+    <div class="text-center py-6 bg-slate-800/40 rounded-2xl border border-slate-800">
+      <p class="text-xs text-slate-400 uppercase">ค่าที่ Call ล่าสุด</p>
+      <div id="host-latest" class="text-5xl sm:text-6xl font-black text-emerald-400 my-4 break-words px-4">-</div>
+      <button onclick="drawItem()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 px-8 py-3 rounded-xl font-black text-lg shadow-lg transition active:scale-95">
+        🎲 สุ่มตัวถัดไป (Call)
+      </button>
+    </div>
+
+    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+      <p class="text-xs text-slate-400 mb-2">ประวัติที่ออกไปแล้ว:</p>
+      <div id="host-history" class="flex flex-wrap gap-2 max-h-40 overflow-y-auto text-xs"></div>
+    </div>
+
+    <div class="text-xs text-slate-400">
+      ผู้เล่นทั้งหมด (<span id="player-count">0</span> คน): <span id="player-list" class="text-slate-200"></span>
+    </div>
+  </div>
+
+  <div id="player-view" class="hidden bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-2xl w-full max-w-md space-y-4">
+    <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+      <div>
+        <span id="player-name-disp" class="font-bold text-amber-400 text-lg"></span>
+        <span id="player-room-disp" class="ml-2 text-xs bg-slate-800 px-2 py-1 rounded text-slate-400 font-mono"></span>
+      </div>
+      <label class="flex items-center gap-2 cursor-pointer select-none">
+        <span class="text-xs text-slate-300 font-medium">Auto:</span>
+        <input type="checkbox" id="autoToggle" class="sr-only peer" onchange="toggleAuto(this.checked)">
+        <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+      </label>
+    </div>
+
+    <div class="bg-slate-800/70 p-3 rounded-xl border border-slate-700 text-center">
+      <p class="text-xs text-slate-400">Call ล่าสุดที่ออก:</p>
+      <p id="player-latest" class="text-2xl font-black text-emerald-400 truncate mt-0.5">-</p>
+    </div>
+
+    <div id="bingo-grid" class="grid grid-cols-5 gap-1.5 aspect-square"></div>
+  </div>
+
+  <script>
+    const socket = io();
+    let currentRoom = '';
+    let currentDrawn = [];
+
+    window.onload = () => {
+      const roomParam = new URLSearchParams(window.location.search).get('room');
+      if (roomParam) document.getElementById('joinRoomId').value = roomParam;
+    };
+
+    function createHost() {
+      const text = document.getElementById('customItemsInput').value.trim();
+      let customItems = null;
+      if (text) {
+        customItems = text.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+        if (customItems.length < 24) {
+          return alert('ต้องมีคำอย่างน้อย 24 คำขึ้นไป (ตอนนี้มี ' + customItems.length + ' คำ)');
+        }
+      }
+      socket.emit('create-room', { customItems });
+    }
+
+    socket.on('room-created', ({ roomId }) => {
+      currentRoom = roomId;
+      document.getElementById('lobby').classList.add('hidden');
+      document.getElementById('host-view').classList.remove('hidden');
+      document.getElementById('host-room-code').innerText = roomId;
+
+      new QRCode(document.getElementById('qrcode'), {
+        text: `${window.location.origin}?room=${roomId}`,
+        width: 100,
+        height: 100
+      });
+    });
+
+    function drawItem() {
+      socket.emit('draw-item', currentRoom);
+    }
+
+    function joinGame() {
+      const name = document.getElementById('playerName').value.trim();
+      const roomId = document.getElementById('joinRoomId').value.trim();
+      if (!name || !roomId) return alert('กรุณากรอกชื่อและรหัสห้อง');
+      socket.emit('join-room', { roomId, name });
+    }
+
+    socket.on('joined-success', ({ roomId, card, drawnItems }) => {
+      currentRoom = roomId;
+      currentDrawn = drawnItems;
+      document.getElementById('lobby').classList.add('hidden');
+      document.getElementById('player-view').classList.remove('hidden');
+      document.getElementById('player-name-disp').innerText = document.getElementById('playerName').value;
+      document.getElementById('player-room-disp').innerText = roomId;
+
+      if (drawnItems.length > 0) {
+        document.getElementById('player-latest').innerText = drawnItems[drawnItems.length - 1];
+      }
+      renderCard(card);
+    });
+
+    function toggleAuto(enabled) {
+      socket.emit('toggle-auto', { roomId: currentRoom, enabled });
+    }
+
+    socket.on('item-drawn', ({ drawn, history }) => {
+      currentDrawn = history;
+
+      const hLatest = document.getElementById('host-latest');
+      if (hLatest) hLatest.innerText = drawn;
+      const hHistory = document.getElementById('host-history');
+      if (hHistory) {
+        hHistory.innerHTML = history.map(item => `
+          <span class="bg-slate-800 border border-slate-700 px-2 py-1 rounded text-slate-200 font-medium">${item}</span>
+        `).join('');
+      }
+
+      const pLatest = document.getElementById('player-latest');
+      if (pLatest) pLatest.innerText = drawn;
+
+      if (window.lastCard) renderCard(window.lastCard);
+    });
+
+    socket.on('card-updated', (card) => renderCard(card));
+
+    function renderCard(grid) {
+      window.lastCard = grid;
+      const container = document.getElementById('bingo-grid');
+      container.innerHTML = '';
+
+      grid.forEach((row, r) => {
+        row.forEach((cell, c) => {
+          const btn = document.createElement('button');
+          const isDrawn = currentDrawn.includes(cell.val) || cell.val === 'FREE';
+
+          let style = 'border text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center p-1 text-center break-words transition-all ';
+
+          if (cell.marked) {
+            style += 'bg-emerald-600 border-emerald-400 text-white shadow-inner ';
+          } else if (isDrawn) {
+            style += 'bg-slate-700 hover:bg-slate-600 border-amber-400 text-amber-300 animate-pulse ';
+          } else {
+            style += 'bg-slate-800/80 border-slate-800 text-slate-500 cursor-not-allowed opacity-60 ';
+          }
+
+          btn.className = style;
+          btn.innerText = cell.val;
+
+          if (isDrawn) {
+            btn.onclick = () => socket.emit('mark-cell', { roomId: currentRoom, r, c });
+          }
+
+          container.appendChild(btn);
+        });
+      });
+    }
+
+    socket.on('update-players', (names) => {
+      const countEl = document.getElementById('player-count');
+      const listEl = document.getElementById('player-list');
+      if (countEl) countEl.innerText = names.length;
+      if (listEl) listEl.innerText = names.join(', ');
+    });
+
+    socket.on('game-over', ({ winner }) => {
+      alert(`🎉 BINGO! ผู้ชนะคือ: ${winner}`);
+    });
+
+    socket.on('error-msg', (msg) => alert(msg));
+  </script>
+</body>
+</html>
