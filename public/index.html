@@ -3,216 +3,397 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Real-time Bingo</title>
+  <title>Real-time Classroom Bingo</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    .theme-classic { background-color: #ff2a55; border-color: #ff2a55; }
+    .theme-blue { background-color: #2563eb; border-color: #2563eb; }
+    .theme-emerald { background-color: #059669; border-color: #059669; }
+    .theme-purple { background-color: #7c3aed; border-color: #7c3aed; }
+  </style>
 </head>
-<body class="bg-slate-950 text-white min-h-screen flex items-center justify-center p-4 font-sans">
+<body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-3 font-sans">
 
-  <!-- ==================== หน้าสร้างห้อง (แสดงเป็นค่าเริ่มต้น) ==================== -->
-  <div id="host-setup-card" class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-6">
-    <h1 class="text-3xl font-black text-center text-amber-400 tracking-wider">🎯 BINGO REALTIME</h1>
-
-    <div class="bg-slate-800/60 p-5 rounded-xl space-y-4 border border-slate-700">
-      <h2 class="font-bold text-emerald-400 text-lg">สำหรับผู้สร้างห้อง (Host)</h2>
-      <label class="block text-xs text-slate-400 leading-relaxed">
-        ใส่ชุดคำคั่นด้วยจุลภาค (,) หรือเว้นว่างไว้เพื่อใช้เลข 1-75 (ต้องมี 24 คำขึ้นไป):
-      </label>
-      <textarea id="customItemsInput" rows="4" placeholder="เว้นว่างไว้ = ใช้เลข 1-75 อัตโนมัติ" class="w-full p-3 rounded-lg bg-slate-900 border border-slate-700 text-xs focus:ring-1 focus:ring-emerald-400 outline-none text-slate-200"></textarea>
-      <button onclick="createHost()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold transition text-base shadow-lg shadow-emerald-900/30">
-        สร้างห้องใหม่
+  <!-- 1. หน้าเลือกโหมดเริ่มต้น: Host หรือ Join -->
+  <div id="landing-card" class="bg-slate-800 border border-slate-700 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center space-y-6">
+    <h1 class="text-4xl font-black text-amber-400 tracking-wider">🎯 BINGO LIVE</h1>
+    <p class="text-slate-400 text-sm">เลือกระบบที่ต้องการเข้าใช้งาน</p>
+    <div class="space-y-4 pt-2">
+      <button onclick="goToSetup()" class="w-full bg-rose-600 hover:bg-rose-500 py-4 rounded-xl font-black text-lg transition shadow-lg shadow-rose-900/40 flex items-center justify-center gap-2">
+        👑 Host a bingo session (สำหรับครู)
       </button>
-    </div>
-
-    <!-- ลิงก์สำหรับคนที่ต้องการพิมพ์ Code เข้าเล่นเอง -->
-    <div class="text-center pt-2">
-      <button onclick="switchView('manual-join')" class="text-xs text-slate-400 hover:text-amber-400 underline transition">
-        มีรหัสห้องอยู่แล้ว? คลิกที่นี่เพื่อเข้าร่วมห้อง
+      <button onclick="goToManualJoin()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-black text-lg transition shadow-lg shadow-indigo-900/40 flex items-center justify-center gap-2">
+        🎮 Join a session (สำหรับนักเรียน)
       </button>
     </div>
   </div>
 
-  <!-- ==================== หน้าสำหรับคนสแกน QR (ใส่แค่ชื่อ) ==================== -->
-  <div id="qr-join-card" class="hidden bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-6 text-center">
-    <h1 class="text-3xl font-black text-amber-400 tracking-wider">🎯 BINGO REALTIME</h1>
-    
-    <div class="bg-slate-800/60 p-5 rounded-xl space-y-4 border border-slate-700">
-      <p class="text-xs text-slate-400 uppercase tracking-widest">กำลังเข้าร่วมห้อง</p>
-      <p id="qr-room-badge" class="text-3xl font-black text-indigo-400 font-mono tracking-wider">-</p>
-      
-      <input id="qrPlayerName" type="text" placeholder="ใส่ชื่อของคุณ" class="w-full p-3 rounded-lg bg-slate-900 border border-slate-700 text-sm text-center outline-none focus:border-indigo-500 text-white">
-      <button onclick="joinViaQR()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold transition text-sm shadow-lg shadow-indigo-900/30">
-        เข้าเล่นเกม
-      </button>
-    </div>
-  </div>
-
-  <!-- ==================== หน้าเข้าห้องแบบพิมพ์รหัสเอง ==================== -->
-  <div id="manual-join-card" class="hidden bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-6">
-    <h1 class="text-3xl font-black text-center text-amber-400 tracking-wider">🎯 BINGO REALTIME</h1>
-
-    <div class="bg-slate-800/60 p-5 rounded-xl space-y-4 border border-slate-700">
-      <h2 class="font-bold text-indigo-400 text-lg text-center">เข้าร่วมห้อง</h2>
-      <input id="manualPlayerName" type="text" placeholder="ใส่ชื่อของคุณ" class="w-full p-3 rounded-lg bg-slate-900 border border-slate-700 text-sm text-center outline-none focus:border-indigo-500">
-      <input id="manualRoomId" type="text" placeholder="รหัสห้อง 4 ตัว" class="w-full p-3 rounded-lg bg-slate-900 border border-slate-700 text-sm text-center uppercase tracking-widest outline-none focus:border-indigo-500">
-      <button onclick="joinManual()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold transition text-sm shadow-lg shadow-indigo-900/30">
-        เข้าร่วมห้อง
-      </button>
+  <!-- 2. หน้าตั้งค่ากระดานบิงโกของ Host (ฟอร์ม + Live Card Preview ด้านข้าง) -->
+  <div id="host-config-card" class="hidden bg-slate-800 border border-slate-700 p-6 rounded-2xl shadow-2xl max-w-4xl w-full">
+    <div class="flex items-center justify-between border-b border-slate-700 pb-4 mb-6">
+      <h2 class="text-2xl font-black text-white">Bingo Card Generator</h2>
+      <button onclick="goToLanding()" class="text-xs text-slate-400 hover:text-white">← กลับหน้าแรก</button>
     </div>
 
-    <div class="text-center pt-2">
-      <button onclick="switchView('host-setup')" class="text-xs text-slate-400 hover:text-emerald-400 underline transition">
-        กลับไปหน้าสร้างห้อง
-      </button>
+    <!-- แถบเลือกโหมดกระดาน -->
+    <div class="grid grid-cols-3 gap-2 p-1 bg-slate-900 rounded-xl mb-6 text-sm font-bold">
+      <button id="tab-1-75" onclick="setMode('1-75')" class="py-2.5 rounded-lg bg-rose-600 text-white transition">1-75 Numbers</button>
+      <button id="tab-1-90" onclick="setMode('1-90')" class="py-2.5 rounded-lg text-slate-400 hover:text-white transition">1-90 Numbers</button>
+      <button id="tab-custom" onclick="setMode('custom')" class="py-2.5 rounded-lg text-slate-400 hover:text-white transition">Custom Words</button>
     </div>
-  </div>
 
-  <!-- ==================== จอแสดงผล Host ==================== -->
-  <div id="host-view" class="hidden bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-4xl space-y-6">
-    <div class="flex justify-between items-center border-b border-slate-800 pb-4">
-      <div>
-        <p class="text-xs text-slate-400 uppercase tracking-wider">Room Code</p>
-        <p id="host-room-code" class="text-5xl font-black text-amber-400 tracking-widest"></p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+      <!-- ฟอร์มกรอกตัวเลือก -->
+      <div class="space-y-4 text-sm">
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Enter a title</label>
+          <input id="cfg-title" type="text" value="BINGO" oninput="updatePreview()" class="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-white font-bold outline-none focus:border-rose-500">
+        </div>
+
+        <div id="col-headers-box">
+          <label class="block text-slate-400 mb-1 font-medium">Columns (B-I-N-G-O)</label>
+          <div class="grid grid-cols-5 gap-1 text-center">
+            <input id="col-0" type="text" value="B" maxlength="1" oninput="updatePreview()" class="p-2 bg-slate-900 border border-slate-700 rounded text-center font-bold">
+            <input id="col-1" type="text" value="I" maxlength="1" oninput="updatePreview()" class="p-2 bg-slate-900 border border-slate-700 rounded text-center font-bold">
+            <input id="col-2" type="text" value="N" maxlength="1" oninput="updatePreview()" class="p-2 bg-slate-900 border border-slate-700 rounded text-center font-bold">
+            <input id="col-3" type="text" value="G" maxlength="1" oninput="updatePreview()" class="p-2 bg-slate-900 border border-slate-700 rounded text-center font-bold">
+            <input id="col-4" type="text" value="O" maxlength="1" oninput="updatePreview()" class="p-2 bg-slate-900 border border-slate-700 rounded text-center font-bold">
+          </div>
+        </div>
+
+        <div id="custom-words-box" class="hidden">
+          <label class="block text-slate-400 mb-1 font-medium">Enter words or numbers (1 บรรทัดต่อ 1 ค่า)</label>
+          <textarea id="cfg-words" rows="5" oninput="updatePreview()" placeholder="พิมพ์ข้อความทีละบรรทัด เช่น ลูฟี่&#10;โซโล&#10;นามิ" class="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-white font-medium outline-none"></textarea>
+          <p id="words-count-tag" class="text-xs text-amber-400 mt-1">จำนวนคำ: 0 คำ</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1 font-medium">Choose a theme</label>
+            <select id="cfg-theme" onchange="updatePreview()" class="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-white outline-none">
+              <option value="theme-classic">Classic Red</option>
+              <option value="theme-blue">Ocean Blue</option>
+              <option value="theme-emerald">Emerald Green</option>
+              <option value="theme-purple">Royal Purple</option>
+            </select>
+          </div>
+          <div id="grid-size-box" class="hidden">
+            <label class="block text-slate-400 mb-1 font-medium">Grid size</label>
+            <select id="cfg-grid-size" onchange="updatePreview()" class="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-white outline-none">
+              <option value="5">5 x 5</option>
+              <option value="4">4 x 4</option>
+              <option value="3">3 x 3</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="free-space-box" class="flex items-center gap-2 pt-2">
+          <input type="checkbox" id="cfg-include-free" checked onchange="updatePreview()" class="w-4 h-4 rounded text-rose-600 focus:ring-0">
+          <label for="cfg-include-free" class="text-slate-300 font-medium">Include Free Space</label>
+          <input type="text" id="cfg-free-text" value="FREE SPACE" oninput="updatePreview()" class="ml-2 p-1.5 px-2 bg-slate-900 border border-slate-700 rounded text-xs">
+        </div>
+
+        <button onclick="launchHostRoom()" class="w-full bg-rose-600 hover:bg-rose-500 py-3.5 rounded-xl font-black text-white text-base transition shadow-lg shadow-rose-900/40 mt-4">
+          Next Step: สร้างห้องเกม ≫
+        </button>
       </div>
-      <div id="qrcode" class="p-2 bg-white rounded-xl shadow"></div>
-    </div>
 
-    <div class="text-center py-6 bg-slate-800/40 rounded-2xl border border-slate-800">
-      <p class="text-xs text-slate-400 uppercase">ค่าที่ Call ล่าสุด</p>
-      <div id="host-latest" class="text-5xl sm:text-6xl font-black text-emerald-400 my-4 break-words px-4">-</div>
-      <button onclick="drawItem()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 px-8 py-3 rounded-xl font-black text-lg shadow-lg transition active:scale-95">
-        🎲 สุ่มตัวถัดไป (Call)
-      </button>
-    </div>
-
-    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
-      <p class="text-xs text-slate-400 mb-2">ประวัติที่ออกไปแล้ว:</p>
-      <div id="host-history" class="flex flex-wrap gap-2 max-h-40 overflow-y-auto text-xs"></div>
-    </div>
-
-    <div class="text-xs text-slate-400">
-      ผู้เล่นทั้งหมด (<span id="player-count">0</span> คน): <span id="player-list" class="text-slate-200"></span>
+      <!-- Live Preview กระดานด้านขวา -->
+      <div class="flex flex-col items-center">
+        <p class="text-xs text-slate-400 font-bold uppercase mb-2">Live Card Preview</p>
+        <div id="preview-card" class="theme-classic p-4 rounded-xl shadow-2xl w-full max-w-[320px] text-center border-4">
+          <h3 id="prev-title" class="text-3xl font-black text-white tracking-widest mb-3">B I N G O</h3>
+          <div id="prev-grid" class="bg-white border-2 border-black grid grid-cols-5 divide-x-2 divide-y-2 divide-black text-black font-black text-sm">
+            <!-- ตัวอย่าง Render พรีวิว -->
+          </div>
+          <p class="text-[10px] text-white/80 mt-2 font-mono">myfreebingocards.com style</p>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- ==================== จอแสดงผล Player ==================== -->
-  <div id="player-view" class="hidden bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-2xl w-full max-w-md space-y-4">
-    <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-      <div>
-        <span id="player-name-disp" class="font-bold text-amber-400 text-lg"></span>
-        <span id="player-room-disp" class="ml-2 text-xs bg-slate-800 px-2 py-1 rounded text-slate-400 font-mono"></span>
+  <!-- 3. หน้าสำหรับนักเรียนที่สแกน QR Code (ใส่แค่ชื่อ ไม่ต้องกรอก Code) -->
+  <div id="qr-join-card" class="hidden bg-slate-800 border border-slate-700 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center space-y-5">
+    <h1 class="text-3xl font-black text-amber-400 tracking-wider">🎯 เข้าร่วมห้องเรียน</h1>
+    <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700">
+      <p class="text-xs text-slate-400">รหัสห้องเรียน:</p>
+      <p id="qr-code-display" class="text-4xl font-black text-rose-500 tracking-widest mt-1">-</p>
+    </div>
+    <div>
+      <input id="qr-name-input" type="text" placeholder="พิมพ์ชื่อ-นามสกุล / เลขที่" class="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-center font-bold outline-none focus:border-indigo-500">
+    </div>
+    <button onclick="submitQRJoin()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-black text-lg transition shadow-lg shadow-indigo-900/40">
+      เข้าห้องเล่นเกม
+    </button>
+  </div>
+
+  <!-- 4. หน้าสำหรับนักเรียนที่เข้าผ่านหน้าเว็บปกติ (กรอกชื่อ + Room Code) -->
+  <div id="manual-join-card" class="hidden bg-slate-800 border border-slate-700 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center space-y-4">
+    <h1 class="text-3xl font-black text-indigo-400 tracking-wider">เข้าเล่นด้วยรหัส</h1>
+    <input id="manual-code-input" type="text" placeholder="รหัสห้อง 4 ตัว" class="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-center font-mono font-black text-xl uppercase tracking-widest outline-none">
+    <input id="manual-name-input" type="text" placeholder="ชื่อ-นามสกุล / เลขที่" class="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-center font-bold outline-none">
+    <button onclick="submitManualJoin()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-black transition text-lg shadow-lg shadow-indigo-900/40">
+      เข้าร่วมทันที
+    </button>
+    <button onclick="goToLanding()" class="text-xs text-slate-400 hover:text-white pt-2 block w-full">← กลับหน้าแรก</button>
+  </div>
+
+  <!-- 5. หน้าจอหลักของครู (Host & Teacher Dashboard ดูจอทุกคนแบบ Real-time) -->
+  <div id="teacher-view" class="hidden w-full max-w-6xl space-y-6">
+    <!-- แถบด้านบน: QR Code และตัวสุ่ม Call -->
+    <div class="bg-slate-800 border border-slate-700 p-6 rounded-2xl shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-6">
+        <div id="host-qrcode" class="p-2 bg-white rounded-xl shadow"></div>
+        <div>
+          <span class="text-xs text-slate-400 font-bold uppercase tracking-wider">Room Code สแกนเข้าห้อง</span>
+          <p id="teacher-room-code" class="text-5xl font-black text-amber-400 tracking-widest"></p>
+          <p class="text-xs text-emerald-400 mt-1">● นักเรียนในห้อง: <span id="teacher-student-count">0</span> คน</p>
+        </div>
       </div>
+
+      <div class="flex flex-col items-center bg-slate-900/80 p-4 px-8 rounded-2xl border border-slate-700">
+        <span class="text-xs text-slate-400 uppercase font-medium">ค่าที่ Call ล่าสุด</span>
+        <div id="teacher-last-call" class="text-5xl font-black text-rose-500 my-1">-</div>
+        <button onclick="drawNextItem()" class="mt-2 bg-rose-600 hover:bg-rose-500 text-white font-black px-6 py-2.5 rounded-xl shadow-lg transition active:scale-95">
+          🎲 สุ่มตัวถัดไป (Call)
+        </button>
+      </div>
+
+      <div class="max-w-xs w-full bg-slate-900 p-3 rounded-xl border border-slate-700 text-xs">
+        <span class="text-slate-400 font-bold block mb-1">ประวัติออกแล้ว:</span>
+        <div id="teacher-call-history" class="flex flex-wrap gap-1 max-h-24 overflow-y-auto"></div>
+      </div>
+    </div>
+
+    <!-- แผงตรวจจับนักเรียนทุกคน (Teacher Monitoring Dashboard) -->
+    <div class="bg-slate-800 border border-slate-700 p-6 rounded-2xl shadow-xl">
+      <div class="flex justify-between items-center mb-4">
+        <div>
+          <h3 class="text-xl font-black text-white">กระดานของนักเรียนทุกคน (Live Monitor)</h3>
+          <p class="text-xs text-slate-400">ระบบแสดงกระดานจริงและแจ้งเตือนนักเรียนที่ใกล้จะบิงโกโดยอัตโนมัติ</p>
+        </div>
+      </div>
+
+      <!-- Grid แสดงการ์ดของนักเรียนแต่ละคน -->
+      <div id="students-grid-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <!-- การ์ดย่อของนักเรียนจะถูก Render ที่นี่แบบสดๆ -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. หน้าจอกระดานนักเรียน (Student View) -->
+  <div id="student-view" class="hidden w-full max-w-sm space-y-4">
+    <div class="flex justify-between items-center bg-slate-800 p-3 px-4 rounded-xl border border-slate-700">
+      <div>
+        <p id="student-name-tag" class="font-black text-amber-400 text-base leading-tight"></p>
+        <span id="student-togo-tag" class="text-xs bg-rose-900/60 text-rose-300 font-bold px-2 py-0.5 rounded-full mt-1 inline-block">
+          ขาดอีก 5 ช่องจะบิงโก
+        </span>
+      </div>
+      <!-- Toggle สวิตช์ Auto -->
       <label class="flex items-center gap-2 cursor-pointer select-none">
-        <span class="text-xs text-slate-300 font-medium">Auto:</span>
-        <input type="checkbox" id="autoToggle" class="sr-only peer" onchange="toggleAuto(this.checked)">
+        <span class="text-xs text-slate-300 font-bold">Auto:</span>
+        <input type="checkbox" id="student-auto-toggle" class="sr-only peer" onchange="toggleAuto(this.checked)">
         <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
       </label>
     </div>
 
-    <div class="bg-slate-800/70 p-3 rounded-xl border border-slate-700 text-center">
-      <p class="text-xs text-slate-400">Call ล่าสุดที่ออก:</p>
-      <p id="player-latest" class="text-2xl font-black text-emerald-400 truncate mt-0.5">-</p>
+    <!-- แถบแจ้งเตือน Call ล่าสุด -->
+    <div class="bg-slate-800 p-2.5 rounded-xl border border-slate-700 text-center">
+      <span class="text-xs text-slate-400">Call ล่าสุด:</span>
+      <span id="student-last-call" class="text-2xl font-black text-rose-500 ml-2">-</span>
     </div>
 
-    <div id="bingo-grid" class="grid grid-cols-5 gap-1.5 aspect-square"></div>
+    <!-- ตัวกระดานจริงของนักเรียน (สไตล์การ์ดจริง) -->
+    <div id="student-card-wrapper" class="theme-classic p-4 rounded-2xl shadow-2xl border-4">
+      <h3 id="student-card-title" class="text-3xl font-black text-white text-center tracking-widest mb-3">B I N G O</h3>
+      <div id="student-grid" class="bg-white border-2 border-black grid text-black font-black">
+        <!-- ตารางปุ่มกดจะถูก Render ที่นี่ -->
+      </div>
+    </div>
   </div>
 
   <script>
     const socket = io();
+    let currentMode = '1-75';
     let currentRoom = '';
     let currentDrawn = [];
+    let myBoard = null;
 
-    // ตรวจสอบทันทีตอนเปิดหน้าเว็บว่ามี ?room=XXXX ติดมากับลิงก์หรือไม่ (จากการสแกน QR)
+    // ตรวจจับ URL ว่าถูกเปิดจากการสแกน QR หรือไม่
     window.onload = () => {
       const urlParams = new URLSearchParams(window.location.search);
       const roomParam = urlParams.get('room');
-
       if (roomParam) {
         currentRoom = roomParam.toUpperCase();
-        document.getElementById('qr-room-badge').innerText = currentRoom;
-        switchView('qr-join');
+        document.getElementById('qr-code-display').innerText = currentRoom;
+        showView('qr-join');
       } else {
-        switchView('host-setup');
+        showView('landing');
+        updatePreview();
       }
     };
 
-    function switchView(viewName) {
-      document.getElementById('host-setup-card').classList.add('hidden');
-      document.getElementById('qr-join-card').classList.add('hidden');
-      document.getElementById('manual-join-card').classList.add('hidden');
-
-      if (viewName === 'host-setup') document.getElementById('host-setup-card').classList.remove('hidden');
-      if (viewName === 'qr-join') document.getElementById('qr-join-card').classList.remove('hidden');
-      if (viewName === 'manual-join') document.getElementById('manual-join-card').classList.remove('hidden');
+    function showView(viewId) {
+      ['landing-card', 'host-config-card', 'qr-join-card', 'manual-join-card', 'teacher-view', 'student-view'].forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+      });
+      if (viewId === 'landing') document.getElementById('landing-card').classList.remove('hidden');
+      if (viewId === 'host-config') document.getElementById('host-config-card').classList.remove('hidden');
+      if (viewId === 'qr-join') document.getElementById('qr-join-card').classList.remove('hidden');
+      if (viewId === 'manual-join') document.getElementById('manual-join-card').classList.remove('hidden');
+      if (viewId === 'teacher') document.getElementById('teacher-view').classList.remove('hidden');
+      if (viewId === 'student') document.getElementById('student-view').classList.remove('hidden');
     }
 
-    // Host สร้างห้อง
-    function createHost() {
-      const text = document.getElementById('customItemsInput').value.trim();
-      let customItems = null;
-      if (text) {
-        customItems = text.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-        if (customItems.length < 24) {
-          return alert('ต้องมีคำอย่างน้อย 24 คำขึ้นไป (ตอนนี้มี ' + customItems.length + ' คำ)');
+    function goToLanding() { showView('landing'); }
+    function goToSetup() { showView('host-config'); updatePreview(); }
+    function goToManualJoin() { showView('manual-join'); }
+
+    // เปลี่ยนแท็บเลือกโหมด
+    function setMode(mode) {
+      currentMode = mode;
+      ['1-75', '1-90', 'custom'].forEach(m => {
+        const btn = document.getElementById(`tab-${m}`);
+        if (m === mode) {
+          btn.className = 'py-2.5 rounded-lg bg-rose-600 text-white transition';
+        } else {
+          btn.className = 'py-2.5 rounded-lg text-slate-400 hover:text-white transition';
+        }
+      });
+
+      document.getElementById('col-headers-box').classList.toggle('hidden', mode !== '1-75');
+      document.getElementById('custom-words-box').classList.toggle('hidden', mode !== 'custom');
+      document.getElementById('grid-size-box').classList.toggle('hidden', mode !== 'custom');
+      document.getElementById('free-space-box').classList.toggle('hidden', mode === '1-90');
+
+      if (mode === '1-75') document.getElementById('cfg-title').value = 'BINGO';
+      if (mode === '1-90') document.getElementById('cfg-title').value = 'B I N G O 90';
+      if (mode === 'custom') document.getElementById('cfg-title').value = 'CUSTOM BINGO';
+
+      updatePreview();
+    }
+
+    // อัปเดตพรีวิวกระดานด้านขวา
+    function updatePreview() {
+      const title = document.getElementById('cfg-title').value || 'BINGO';
+      const theme = document.getElementById('cfg-theme').value;
+      const prevCard = document.getElementById('preview-card');
+      const prevTitle = document.getElementById('prev-title');
+      const prevGrid = document.getElementById('prev-grid');
+
+      prevCard.className = `${theme} p-4 rounded-xl shadow-2xl w-full max-w-[320px] text-center border-4`;
+      prevTitle.innerText = title;
+      prevGrid.innerHTML = '';
+
+      if (currentMode === '1-75') {
+        prevGrid.className = 'bg-white border-2 border-black grid grid-cols-5 divide-x-2 divide-y-2 divide-black text-black font-black text-sm';
+        const cols = [
+          [2, 10, 6, 4, 1],
+          [22, 17, 28, 23, 21],
+          [36, 39, 'FREE', 45, 44],
+          [52, 51, 48, 56, 55],
+          [73, 72, 62, 74, 68]
+        ];
+        for (let r = 0; r < 5; r++) {
+          for (let c = 0; c < 5; c++) {
+            const div = document.createElement('div');
+            div.className = 'h-10 flex items-center justify-center p-0.5 text-center leading-none text-xs';
+            div.innerText = cols[c][r];
+            prevGrid.appendChild(div);
+          }
+        }
+      } else if (currentMode === '1-90') {
+        prevGrid.className = 'bg-white border-2 border-black grid grid-cols-9 divide-x-2 divide-y-2 divide-black text-black font-black text-[10px]';
+        for (let r = 0; r < 3; r++) {
+          for (let c = 0; c < 9; c++) {
+            const div = document.createElement('div');
+            div.className = 'h-8 flex items-center justify-center';
+            div.innerText = (r + c) % 2 === 0 ? (c * 10 + r + 1) : '';
+            prevGrid.appendChild(div);
+          }
+        }
+      } else {
+        const dim = parseInt(document.getElementById('cfg-grid-size').value) || 5;
+        prevGrid.className = `bg-white border-2 border-black grid grid-cols-${dim} divide-x-2 divide-y-2 divide-black text-black font-black text-xs`;
+        const wordsText = document.getElementById('cfg-words').value.trim();
+        const list = wordsText ? wordsText.split('\n').filter(Boolean) : [];
+        document.getElementById('words-count-tag').innerText = `จำนวนคำ: ${list.length} คำ (ต้องการอย่างน้อย ${dim * dim} คำ)`;
+
+        for (let i = 0; i < dim * dim; i++) {
+          const div = document.createElement('div');
+          div.className = 'h-10 flex items-center justify-center p-0.5 text-center leading-none text-[10px] truncate';
+          div.innerText = list[i] || `Item ${i + 1}`;
+          prevGrid.appendChild(div);
         }
       }
-      socket.emit('create-room', { customItems });
+    }
+
+    // Host กดยืนยันสร้างห้อง
+    function launchHostRoom() {
+      const config = {
+        mode: currentMode,
+        title: document.getElementById('cfg-title').value,
+        theme: document.getElementById('cfg-theme').value,
+        gridDim: document.getElementById('cfg-grid-size').value,
+        includeFree: document.getElementById('cfg-include-free').checked,
+        freeText: document.getElementById('cfg-free-text').value,
+        customWords: document.getElementById('cfg-words').value.split('\n').map(s => s.trim()).filter(Boolean)
+      };
+
+      if (config.mode === 'custom' && config.customWords.length < (config.gridDim * config.gridDim)) {
+        return alert(`กรุณากรอกคำให้ครบอย่างน้อย ${config.gridDim * config.gridDim} คำ`);
+      }
+
+      socket.emit('create-room', config);
     }
 
     socket.on('room-created', ({ roomId }) => {
       currentRoom = roomId;
-      hideAllSetupCards();
-      document.getElementById('host-view').classList.remove('hidden');
-      document.getElementById('host-room-code').innerText = roomId;
+      showView('teacher');
+      document.getElementById('teacher-room-code').innerText = roomId;
 
-      // ลิงก์ที่สร้างใน QR จะมี ?room=XXXX แนบไปเสมอ
-      new QRCode(document.getElementById('qrcode'), {
+      // สร้าง QR Code ลิงก์ตรง
+      new QRCode(document.getElementById('host-qrcode'), {
         text: `${window.location.origin}?room=${roomId}`,
-        width: 100,
-        height: 100
+        width: 110,
+        height: 110
       });
     });
 
-    // Player เข้าร่วมผ่าน QR (กรอกแค่ชื่อ)
-    function joinViaQR() {
-      const name = document.getElementById('qrPlayerName').value.trim();
-      if (!name) return alert('กรุณากรอกชื่อของคุณ');
+    // นักเรียนเข้าห้อง (QR)
+    function submitQRJoin() {
+      const name = document.getElementById('qr-name-input').value.trim();
+      if (!name) return alert('กรุณากรอกชื่อ');
       socket.emit('join-room', { roomId: currentRoom, name });
     }
 
-    // Player เข้าร่วมแบบกรอกรหัสเอง
-    function joinManual() {
-      const name = document.getElementById('manualPlayerName').value.trim();
-      const roomId = document.getElementById('manualRoomId').value.trim();
-      if (!name || !roomId) return alert('กรุณากรอกชื่อและรหัสห้องให้ครบถ้วน');
+    // นักเรียนเข้าห้อง (กรอกรหัสเอง)
+    function submitManualJoin() {
+      const roomId = document.getElementById('manual-code-input').value.trim();
+      const name = document.getElementById('manual-name-input').value.trim();
+      if (!roomId || !name) return alert('กรุณากรอกข้อมูลให้ครบถ้วน');
       currentRoom = roomId.toUpperCase();
       socket.emit('join-room', { roomId: currentRoom, name });
     }
 
-    socket.on('joined-success', ({ roomId, card, drawnItems }) => {
+    socket.on('joined-success', ({ roomId, config, board, drawn }) => {
       currentRoom = roomId;
-      currentDrawn = drawnItems;
-      hideAllSetupCards();
-      document.getElementById('player-view').classList.remove('hidden');
-      
-      const enteredName = document.getElementById('qrPlayerName').value || document.getElementById('manualPlayerName').value;
-      document.getElementById('player-name-disp').innerText = enteredName;
-      document.getElementById('player-room-disp').innerText = roomId;
+      myBoard = board;
+      currentDrawn = drawn;
+      showView('student');
 
-      if (drawnItems.length > 0) {
-        document.getElementById('player-latest').innerText = drawnItems[drawnItems.length - 1];
-      }
-      renderCard(card);
+      const name = document.getElementById('qr-name-input').value || document.getElementById('manual-name-input').value;
+      document.getElementById('student-name-tag').innerText = name;
+      document.getElementById('student-card-title').innerText = config.title;
+      document.getElementById('student-card-wrapper').className = `${config.theme} p-4 rounded-2xl shadow-2xl border-4`;
+
+      renderStudentGrid();
     });
 
-    function hideAllSetupCards() {
-      document.getElementById('host-setup-card').classList.add('hidden');
-      document.getElementById('qr-join-card').classList.add('hidden');
-      document.getElementById('manual-join-card').classList.add('hidden');
-    }
-
-    function drawItem() {
+    function drawNextItem() {
       socket.emit('draw-item', currentRoom);
     }
 
@@ -220,47 +401,57 @@
       socket.emit('toggle-auto', { roomId: currentRoom, enabled });
     }
 
-    socket.on('item-drawn', ({ drawn, history }) => {
+    socket.on('item-drawn', ({ item, history }) => {
       currentDrawn = history;
+      const tCall = document.getElementById('teacher-last-call');
+      if (tCall) tCall.innerText = item;
 
-      const hLatest = document.getElementById('host-latest');
-      if (hLatest) hLatest.innerText = drawn;
-      const hHistory = document.getElementById('host-history');
-      if (hHistory) {
-        hHistory.innerHTML = history.map(item => `
-          <span class="bg-slate-800 border border-slate-700 px-2 py-1 rounded text-slate-200 font-medium">${item}</span>
-        `).join('');
+      const tHist = document.getElementById('teacher-call-history');
+      if (tHist) {
+        tHist.innerHTML = history.map(h => `<span class="bg-slate-800 border border-slate-700 px-2 py-0.5 rounded text-white font-bold">${h}</span>`).join('');
       }
 
-      const pLatest = document.getElementById('player-latest');
-      if (pLatest) pLatest.innerText = drawn;
+      const sCall = document.getElementById('student-last-call');
+      if (sCall) sCall.innerText = item;
 
-      if (window.lastCard) renderCard(window.lastCard);
+      renderStudentGrid();
     });
 
-    socket.on('card-updated', (card) => renderCard(card));
+    socket.on('board-updated', (board) => {
+      myBoard = board;
+      renderStudentGrid();
+    });
 
-    function renderCard(grid) {
-      window.lastCard = grid;
-      const container = document.getElementById('bingo-grid');
+    // เรนเดอร์การ์ดฝั่งนักเรียน
+    function renderStudentGrid() {
+      if (!myBoard) return;
+      const container = document.getElementById('student-grid');
       container.innerHTML = '';
+
+      const { grid, rows, cols } = myBoard;
+      container.className = `bg-white border-2 border-black grid grid-cols-${cols} divide-x-2 divide-y-2 divide-black text-black font-black`;
 
       grid.forEach((row, r) => {
         row.forEach((cell, c) => {
           const btn = document.createElement('button');
-          const isDrawn = currentDrawn.includes(cell.val) || cell.val === 'FREE';
-          
-          let style = 'border text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center p-1 text-center break-words transition-all ';
-
-          if (cell.marked) {
-            style += 'bg-emerald-600 border-emerald-400 text-white shadow-inner ';
-          } else if (isDrawn) {
-            style += 'bg-slate-700 hover:bg-slate-600 border-amber-400 text-amber-300 animate-pulse ';
-          } else {
-            style += 'bg-slate-800/80 border-slate-800 text-slate-500 cursor-not-allowed opacity-60 ';
+          if (cell.isBlank) {
+            btn.className = 'h-14 bg-slate-200 border-none cursor-default';
+            container.appendChild(btn);
+            return;
           }
 
-          btn.className = style;
+          const isDrawn = currentDrawn.includes(cell.val) || cell.isFree;
+          let cls = 'h-14 flex items-center justify-center p-1 text-center font-black transition-all text-xs sm:text-sm ';
+
+          if (cell.marked) {
+            cls += 'bg-emerald-500 text-white ';
+          } else if (isDrawn) {
+            cls += 'bg-amber-100 hover:bg-amber-200 text-amber-950 animate-pulse ';
+          } else {
+            cls += 'bg-white text-slate-400 cursor-not-allowed ';
+          }
+
+          btn.className = cls;
           btn.innerText = cell.val;
 
           if (isDrawn) {
@@ -272,15 +463,65 @@
       });
     }
 
-    socket.on('update-players', (names) => {
-      const countEl = document.getElementById('player-count');
-      const listEl = document.getElementById('player-list');
-      if (countEl) countEl.innerText = names.length;
-      if (listEl) listEl.innerText = names.join(', ');
+    // ฝั่งครู: รับข้อมูลอัปเดต Dashboard กระดานนักเรียนทุกคน
+    socket.on('update-students-dashboard', (students) => {
+      const countTag = document.getElementById('teacher-student-count');
+      if (countTag) countTag.innerText = students.length;
+
+      const container = document.getElementById('students-grid-container');
+      if (!container) return;
+      container.innerHTML = '';
+
+      // จัดเรียงคนที่ใกล้บิงโกที่สุด (minToGo น้อยที่สุด) ขึ้นมาอยู่บนสุด
+      students.sort((a, b) => a.minToGo - b.minToGo);
+
+      students.forEach(st => {
+        const card = document.createElement('div');
+        const isNearBingo = st.minToGo <= 2 && st.minToGo > 0;
+        const isBingo = st.minToGo === 0;
+
+        let borderCls = 'border-slate-700';
+        if (isBingo) borderCls = 'border-emerald-500 ring-2 ring-emerald-500';
+        else if (isNearBingo) borderCls = 'border-amber-400 ring-2 ring-amber-400';
+
+        card.className = `bg-slate-900 p-3 rounded-xl border ${borderCls} flex flex-col justify-between`;
+
+        let badge = `<span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-bold">ขาดอีก ${st.minToGo} ช่อง</span>`;
+        if (isBingo) badge = `<span class="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-black animate-bounce">🎉 BINGO แล้ว!</span>`;
+        else if (isNearBingo) badge = `<span class="text-[10px] bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full font-black animate-pulse">🔥 ใกล้แล้ว! (ขาดอีก ${st.minToGo})</span>`;
+
+        card.innerHTML = `
+          <div class="flex justify-between items-center mb-2">
+            <span class="font-bold text-white text-xs truncate max-w-[110px]">${st.name}</span>
+            ${badge}
+          </div>
+        `;
+
+        // วาดตารางจำลองใบเล็กของนักเรียน
+        const miniGrid = document.createElement('div');
+        miniGrid.className = `grid grid-cols-${st.board.cols} gap-0.5 bg-slate-800 p-1 rounded border border-slate-700 aspect-square`;
+
+        st.board.grid.forEach(row => {
+          row.forEach(c => {
+            const dot = document.createElement('div');
+            if (c.isBlank) {
+              dot.className = 'bg-slate-950 rounded-[2px]';
+            } else if (c.marked) {
+              dot.className = 'bg-emerald-500 rounded-[2px] shadow-sm';
+            } else {
+              dot.className = 'bg-slate-700 rounded-[2px]';
+            }
+            miniGrid.appendChild(dot);
+          });
+        });
+
+        card.appendChild(miniGrid);
+        container.appendChild(card);
+      });
     });
 
     socket.on('game-over', ({ winner }) => {
-      alert(`🎉 BINGO! ผู้ชนะคือ: ${winner}`);
+      alert(`🎉 BINGO! มีผู้ชนะแล้วคือ: ${winner}`);
     });
 
     socket.on('error-msg', (msg) => alert(msg));
